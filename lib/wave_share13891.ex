@@ -3,16 +3,6 @@ defmodule WaveShare13891 do
   Documentation for WaveShare13891.
   """
 
-  @doc """
-  Hello world.
-
-  ## Examples
-
-      iex> WaveShare13891.hello()
-      :world
-
-  """
-  def hello do
-    :world
-  end
+  defdelegate register(key_or_keys), to: WaveShare13891.KeyEvent
+  defdelegate register(key_or_keys, subscriber), to: WaveShare13891.KeyEvent
 end
