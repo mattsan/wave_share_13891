@@ -20,7 +20,8 @@ defmodule WaveShare13891.MixProject do
 
   defp deps do
     [
-      {:circuits_gpio, "~> 0.4.1"}
+      {:circuits_gpio, "~> 0.4.1"},
+      {:circuits_spi, "~> 0.1.3"}
     ]
   end
 end

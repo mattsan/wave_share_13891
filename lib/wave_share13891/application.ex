@@ -7,7 +7,9 @@ defmodule WaveShare13891.Application do
     children = [
       {Registry, keys: :duplicate, name: Registry.WaveShare13891},
       WaveShare13891.KeyEvent,
-      WaveShare13891.GPIO
+      WaveShare13891.GPIO,
+      WaveShare13891.SPI,
+      WaveShare13891.LCD
     ]
 
     opts = [strategy: :one_for_one, name: WaveShare13891.Supervisor]
