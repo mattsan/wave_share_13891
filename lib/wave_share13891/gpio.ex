@@ -19,10 +19,17 @@ defmodule WaveShare13891.GPIO do
   @key2 20
   @key3 16
 
+  defguard is_pin_level(value) when value in [0, 1]
+
   def start_link(_opts) do
     state = %{}
     GenServer.start_link(__MODULE__, state, name: @name)
   end
+
+  def set_lcd_cs(value) when is_pin_level(value), do: GenServer.call(@name, {:set, :lcd_cs, value})
+  def set_lcd_rst(value) when is_pin_level(value), do: GenServer.call(@name, {:set, :lcd_rst, value})
+  def set_lcd_dc(value) when is_pin_level(value), do: GenServer.call(@name, {:set, :lcd_dc, value})
+  def set_lcd_bl(value) when is_pin_level(value), do: GenServer.call(@name, {:set, :lcd_bl, value})
 
   def init(state) do
     {:ok, lcd_cs} = GPIO.open(@lcd_cs, :output)
@@ -64,6 +71,19 @@ defmodule WaveShare13891.GPIO do
     }
 
     {:ok, Map.put(state, :gpio, gpio)}
+  end
+
+  def handle_call({:set, port, value}, _from, state) do
+    resp =
+      case port do
+        :lcd_cs -> state.gpio.lcd_cs
+        :lcd_rst -> state.gpio.lcd_rst
+        :lcd_dc -> state.gpio.lcd_dc
+        :lcd_bl -> state.gpio.lcd_bl
+      end
+      |> GPIO.write(value)
+
+    {:reply, resp, state}
   end
 
   def handle_info({:circuits_gpio, pin_number, timestamp, value}, state) do
