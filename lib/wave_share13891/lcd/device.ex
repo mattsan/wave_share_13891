@@ -130,6 +130,12 @@ defmodule WaveShare13891.LCD.Device do
 
   def write_data(data) do
     GPIO.set_lcd_dc(1)
-    SPI.transfer(data)
+    Stream.unfold(data, fn data ->
+      case String.split_at(data, 4096) do
+        {"", ""} -> nil
+        tuple -> tuple
+      end
+    end)
+    |> Enum.each(&SPI.transfer/1)
   end
 end
