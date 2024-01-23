@@ -14,8 +14,7 @@ defmodule WaveShare13891.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
-      mod: {WaveShare13891.Application, []}
+      extra_applications: [:logger]
     ]
   end
 
