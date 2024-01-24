@@ -1,6 +1,6 @@
 defmodule WaveShare13891.LCD do
   @moduledoc """
-  WaveShare 13891 LCD interface.
+  Waveshare 13891 LCD server.
   """
 
   use GenServer
@@ -24,6 +24,13 @@ defmodule WaveShare13891.LCD do
 
   @doc """
   Sets window area.
+
+  ```
+  width = x_end - x_start + 1
+  ```
+  ```
+  height = y_end - y_start + 1
+  ```
   """
   @spec set_window(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) :: :ok
   def set_window(x_start, y_start, x_end, y_end) do

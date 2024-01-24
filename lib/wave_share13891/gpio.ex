@@ -1,6 +1,6 @@
 defmodule WaveShare13891.GPIO do
   @moduledoc """
-  WaveShare 13891 GPIO interface.
+  Waveshare 13891 GPIO interface module.
 
   ## Input
 

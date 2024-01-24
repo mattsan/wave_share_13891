@@ -1,12 +1,19 @@
 defmodule WaveShare13891 do
   @moduledoc """
-  Documentation for WaveShare13891.
+  Waveshare 13891 interface module.
   """
 
   use Supervisor
 
   @name __MODULE__
 
+  @doc """
+  Starts servers.
+
+  ## Options
+
+  - `:name` - supervisor's name (default: `WaveShare13891`)
+  """
   def start_link(opts) do
     name = Keyword.get(opts, :name, @name)
     Supervisor.start_link(__MODULE__, opts, name: name)

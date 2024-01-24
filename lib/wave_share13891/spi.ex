@@ -1,6 +1,6 @@
 defmodule WaveShare13891.SPI do
   @moduledoc """
-  WaveShare 13891 SPI interface.
+  Waveshare 13891 SPI server.
   """
 
   use GenServer

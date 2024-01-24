@@ -1,6 +1,6 @@
 defmodule WaveShare13891.KeyEvent do
   @moduledoc """
-  WaveShare 13891 Key event dispatcher.
+  Waveshare 13891 Key event dispatche server.
   """
 
   use GenServer
@@ -15,7 +15,7 @@ defmodule WaveShare13891.KeyEvent do
   defguard is_key(value) when value in [:up, :down, :left, :right, :press, :key1, :key2, :key3]
 
   @doc """
-  Starts key event dispatcher server.
+  Starts key event dispatche server.
   """
   @spec start_link(term()) :: GenServer.on_start()
   def start_link(_opts) do

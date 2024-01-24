@@ -1,6 +1,6 @@
 defmodule WaveShare13891.LCD.Device do
   @moduledoc """
-  WaveShare 13891 LCD low level interface.
+  Waveshare 13891 LCD low level interface module.
 
   see https://files.waveshare.com/upload/e/e2/ST7735S_V1.1_20111121.pdf
   """
