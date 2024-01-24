@@ -128,10 +128,13 @@ defmodule WaveShare13891.GPIO do
     if state.event_listener do
       key = pin_number_to_key(pin_number)
 
-      case value do
-        0 -> send(state.event_listener, {:key_event, key, timestamp, :pressed})
-        1 -> send(state.event_listener, {:key_event, key, timestamp, :released})
-      end
+      kind =
+        case value do
+          0 -> :pressed
+          1 -> :released
+        end
+
+      send(state.event_listener, {:key_event, key, timestamp, kind})
     end
 
     {:noreply, state}
