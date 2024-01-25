@@ -5,7 +5,7 @@ defmodule WaveShare13891.SPI do
 
   use GenServer
 
-  defstruct [:ref, :bus_name]
+  defstruct [:bus_name, :bus]
 
   @name __MODULE__
   @speed_hz 20_000_000
@@ -14,12 +14,14 @@ defmodule WaveShare13891.SPI do
   @doc """
   Starts SPI server.
 
+  - `:name` - Server name (default: `WaveShare13891.SPI`)
   - `:bus_name` - SPI bus name (default: `"spidev0.0"`)
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) when is_list(opts) do
+    name = Keyword.get(opts, :name, @name)
     bus_name = Keyword.get(opts, :bus_name, "spidev0.0")
-    GenServer.start_link(__MODULE__, bus_name, name: @name)
+    GenServer.start_link(__MODULE__, bus_name, name: name)
   end
 
   @doc """
@@ -35,22 +37,30 @@ defmodule WaveShare13891.SPI do
   @impl true
   def init(bus_name) do
     send(self(), :open_spi)
-    state = %WaveShare13891.SPI{bus_name: bus_name}
+    state = new_state(bus_name)
 
     {:ok, state}
   end
 
   @impl true
   def handle_info(:open_spi, state) do
-    {:ok, ref} = Circuits.SPI.open(state.bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
+    {:ok, bus} = Circuits.SPI.open(state.bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
 
-    {:noreply, %{state | ref: ref}}
+    {:noreply, put_bus(state, bus)}
   end
 
   @impl true
   def handle_call({:transfer, data}, _from, state) do
-    Circuits.SPI.transfer(state.ref, data)
+    Circuits.SPI.transfer(state.bus, data)
 
     {:reply, data, state}
+  end
+
+  defp new_state(bus_name) do
+    %__MODULE__{bus_name: bus_name, bus: nil}
+  end
+
+  defp put_bus(%__MODULE__{} = state, bus) do
+    %{state | bus: bus}
   end
 end

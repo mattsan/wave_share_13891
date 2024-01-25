@@ -5,10 +5,9 @@ defmodule WaveShare13891.LCD do
 
   use GenServer
 
-  defstruct [:width, :height, :scanning_direction, :x_adjust, :y_adjust]
-
-  alias WaveShare13891.LCD
   alias WaveShare13891.LCD.Device
+
+  defstruct [:width, :height, :scanning_direction, :x_adjust, :y_adjust]
 
   @name __MODULE__
 
@@ -17,9 +16,7 @@ defmodule WaveShare13891.LCD do
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
-    scanning_direction = Keyword.get(opts, :scanning_direction, :u2d_r2l)
-    state = %{scanning_direction: scanning_direction}
-    GenServer.start_link(__MODULE__, state, name: @name)
+    GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
   @doc """
@@ -28,6 +25,7 @@ defmodule WaveShare13891.LCD do
   ```
   width = x_end - x_start + 1
   ```
+
   ```
   height = y_end - y_start + 1
   ```
@@ -62,28 +60,25 @@ defmodule WaveShare13891.LCD do
   defdelegate set_backlight(condition), to: Device
 
   @impl true
-  def init(state) do
+  def init(opts) do
+    scanning_direction = Keyword.get(opts, :scanning_direction, :u2d_r2l)
+    state = new_state(scanning_direction)
+
     send(self(), :init_lcd)
 
-    new_state =
-      state
-      |> Map.put(:lcd, %LCD{scanning_direction: :d2u_l2r})
-
-    {:ok, new_state}
+    {:ok, state}
   end
 
   @impl true
   def handle_info(:init_lcd, state) do
     {width, height, x_adjust, y_adjust} = Device.initialize(state.scanning_direction)
 
-    lcd = %LCD{state.lcd | width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust}
-
-    {:noreply, %{state | lcd: lcd}}
+    {:noreply, set_gram_scan_way(state, width, height, x_adjust, y_adjust)}
   end
 
   @impl true
   def handle_cast({:set_window, x_start, y_start, x_end, y_end}, state) do
-    Device.set_window(x_start, y_start, x_end, y_end, state.lcd.x_adjust, state.lcd.y_adjust)
+    Device.set_window(x_start, y_start, x_end, y_end, state.x_adjust, state.y_adjust)
 
     {:noreply, state}
   end
@@ -92,5 +87,13 @@ defmodule WaveShare13891.LCD do
     Device.write_data(data)
 
     {:noreply, state}
+  end
+
+  defp new_state(scanning_direction) do
+    %__MODULE__{scanning_direction: scanning_direction}
+  end
+
+  defp set_gram_scan_way(state, width, height, x_adjust, y_adjust) do
+    %{state | width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust}
   end
 end

@@ -40,6 +40,8 @@ defmodule WaveShare13891.GPIO do
 
   alias Circuits.GPIO
 
+  defstruct [:event_listener, :pins]
+
   @name __MODULE__
 
   # output pins
@@ -97,9 +99,9 @@ defmodule WaveShare13891.GPIO do
   @impl true
   def init(opts) do
     event_listener = Keyword.get(opts, :event_listener)
-    state = %{event_listener: event_listener}
+    state = new_state(event_listener)
 
-    send(self(), :initialize_gpio)
+    send(self(), :initialize_pins)
 
     {:ok, state}
   end
@@ -107,10 +109,10 @@ defmodule WaveShare13891.GPIO do
   @impl true
   def handle_call({:set, port, value}, _from, state) do
     case port do
-      :lcd_cs -> state.gpio.lcd_cs
-      :lcd_rst -> state.gpio.lcd_rst
-      :lcd_dc -> state.gpio.lcd_dc
-      :lcd_bl -> state.gpio.lcd_bl
+      :lcd_cs -> state.pins.lcd_cs
+      :lcd_rst -> state.pins.lcd_rst
+      :lcd_dc -> state.pins.lcd_dc
+      :lcd_bl -> state.pins.lcd_bl
     end
     |> GPIO.write(value)
 
@@ -118,10 +120,10 @@ defmodule WaveShare13891.GPIO do
   end
 
   @impl true
-  def handle_info(:initialize_gpio, state) do
-    gpio = initialize_gpio()
+  def handle_info(:initialize_pins, state) do
+    pins = initialize_pins()
 
-    {:noreply, Map.put(state, :gpio, gpio)}
+    {:noreply, put_pins(state, pins)}
   end
 
   def handle_info({:circuits_gpio, pin_number, timestamp, value}, state) do
@@ -140,7 +142,7 @@ defmodule WaveShare13891.GPIO do
     {:noreply, state}
   end
 
-  defp initialize_gpio do
+  defp initialize_pins do
     # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
     {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
     {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
@@ -191,5 +193,13 @@ defmodule WaveShare13891.GPIO do
       @pin_in_key2 -> :key2
       @pin_in_key3 -> :key3
     end
+  end
+
+  defp new_state(event_listener) do
+    %__MODULE__{event_listener: event_listener}
+  end
+
+  defp put_pins(%__MODULE__{} = state, %{} = pins) do
+    %{state | pins: pins}
   end
 end
