@@ -5,7 +5,7 @@ defmodule WaveShare13891.LCD do
 
   use GenServer
 
-  alias WaveShare13891.LCD.Device
+  alias WaveShare13891.ST7735S
 
   defstruct [:width, :height, :scanning_direction, :x_adjust, :y_adjust]
 
@@ -57,7 +57,7 @@ defmodule WaveShare13891.LCD do
   If `condition` is `true`, it's turned on; if `false`, it's turned off.
   """
   @spec set_backlight(boolean()) :: :ok
-  defdelegate set_backlight(condition), to: Device
+  defdelegate set_backlight(condition), to: ST7735S
 
   @impl true
   def init(opts) do
@@ -71,20 +71,20 @@ defmodule WaveShare13891.LCD do
 
   @impl true
   def handle_info(:init_lcd, state) do
-    {width, height, x_adjust, y_adjust} = Device.initialize(state.scanning_direction)
+    {width, height, x_adjust, y_adjust} = ST7735S.initialize(state.scanning_direction)
 
     {:noreply, set_gram_scan_way(state, width, height, x_adjust, y_adjust)}
   end
 
   @impl true
   def handle_cast({:set_window, x_start, y_start, x_end, y_end}, state) do
-    Device.set_window(x_start, y_start, x_end, y_end, state.x_adjust, state.y_adjust)
+    ST7735S.set_window(x_start, y_start, x_end, y_end, state.x_adjust, state.y_adjust)
 
     {:noreply, state}
   end
 
   def handle_cast({:write_data, data}, state) do
-    Device.write_data(data)
+    ST7735S.write_data(data)
 
     {:noreply, state}
   end

@@ -1,4 +1,4 @@
-defmodule WaveShare13891.LCD.Device do
+defmodule WaveShare13891.ST7735S do
   @moduledoc """
   Waveshare 13891 LCD low level interface module.
 
