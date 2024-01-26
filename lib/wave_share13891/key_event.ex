@@ -18,9 +18,8 @@ defmodule WaveShare13891.KeyEvent do
   Starts key event dispatche server.
   """
   @spec start_link(term()) :: GenServer.on_start()
-  def start_link(_opts) do
-    state = %{}
-    GenServer.start_link(__MODULE__, state, name: @name)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
   @doc """
@@ -52,7 +51,9 @@ defmodule WaveShare13891.KeyEvent do
   end
 
   @impl true
-  def init(state) do
+  def init(_opts) do
+    state = %{}
+
     {:ok, state}
   end
 

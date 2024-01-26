@@ -3,11 +3,23 @@ defmodule WaveShare13891.LCD do
   Waveshare 13891 LCD server.
   """
 
+  defmodule State do
+    @moduledoc false
+
+    defstruct [:width, :height, :scanning_direction, :x_adjust, :y_adjust]
+
+    def new(scanning_direction) do
+      %__MODULE__{scanning_direction: scanning_direction}
+    end
+
+    def set_gram_scan_way(state, width, height, x_adjust, y_adjust) do
+      %{state | width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust}
+    end
+  end
+
   use GenServer
 
   alias WaveShare13891.ST7735S
-
-  defstruct [:width, :height, :scanning_direction, :x_adjust, :y_adjust]
 
   @name __MODULE__
 
@@ -62,7 +74,7 @@ defmodule WaveShare13891.LCD do
   @impl true
   def init(opts) do
     scanning_direction = Keyword.get(opts, :scanning_direction, :u2d_r2l)
-    state = new_state(scanning_direction)
+    state = State.new(scanning_direction)
 
     send(self(), :init_lcd)
 
@@ -73,7 +85,7 @@ defmodule WaveShare13891.LCD do
   def handle_info(:init_lcd, state) do
     {width, height, x_adjust, y_adjust} = ST7735S.initialize(state.scanning_direction)
 
-    {:noreply, set_gram_scan_way(state, width, height, x_adjust, y_adjust)}
+    {:noreply, State.set_gram_scan_way(state, width, height, x_adjust, y_adjust)}
   end
 
   @impl true
@@ -87,13 +99,5 @@ defmodule WaveShare13891.LCD do
     ST7735S.write_data(data)
 
     {:noreply, state}
-  end
-
-  defp new_state(scanning_direction) do
-    %__MODULE__{scanning_direction: scanning_direction}
-  end
-
-  defp set_gram_scan_way(state, width, height, x_adjust, y_adjust) do
-    %{state | width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust}
   end
 end

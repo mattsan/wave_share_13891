@@ -36,11 +36,27 @@ defmodule WaveShare13891.GPIO do
   | BL             | P24              | Backlight            | `set_lcd_bl/1`  |
   """
 
+  defmodule State do
+    @moduledoc false
+
+    defstruct [:event_listener, :pins]
+
+    def new(event_listener) do
+      %__MODULE__{event_listener: event_listener}
+    end
+
+    def put_pins(%__MODULE__{} = state, %{} = pins) do
+      %{state | pins: pins}
+    end
+
+    def set_event_listener(%__MODULE__{} = state, event_listener) do
+      %{state | event_listener: event_listener}
+    end
+  end
+
   use GenServer
 
   alias Circuits.GPIO
-
-  defstruct [:event_listener, :pins]
 
   @name __MODULE__
 
@@ -96,10 +112,15 @@ defmodule WaveShare13891.GPIO do
     GenServer.call(@name, {:set, :lcd_bl, value})
   end
 
+  @spec set_event_listener(Process.dest()) :: :ok
+  def set_event_listener(event_listener) do
+    GenServer.call(@name, {:set_event_listener, event_listener})
+  end
+
   @impl true
   def init(opts) do
     event_listener = Keyword.get(opts, :event_listener)
-    state = new_state(event_listener)
+    state = State.new(event_listener)
 
     send(self(), :initialize_pins)
 
@@ -119,11 +140,15 @@ defmodule WaveShare13891.GPIO do
     {:reply, :ok, state}
   end
 
+  def handle_call({:set_event_listener, event_listener}, _from, state) do
+    {:reply, :ok, State.set_event_listener(state, event_listener)}
+  end
+
   @impl true
   def handle_info(:initialize_pins, state) do
     pins = initialize_pins()
 
-    {:noreply, put_pins(state, pins)}
+    {:noreply, State.put_pins(state, pins)}
   end
 
   def handle_info({:circuits_gpio, pin_number, timestamp, value}, state) do
@@ -193,13 +218,5 @@ defmodule WaveShare13891.GPIO do
       @pin_in_key2 -> :key2
       @pin_in_key3 -> :key3
     end
-  end
-
-  defp new_state(event_listener) do
-    %__MODULE__{event_listener: event_listener}
-  end
-
-  defp put_pins(%__MODULE__{} = state, %{} = pins) do
-    %{state | pins: pins}
   end
 end

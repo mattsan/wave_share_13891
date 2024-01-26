@@ -3,9 +3,21 @@ defmodule WaveShare13891.SPI do
   Waveshare 13891 SPI server.
   """
 
-  use GenServer
+  defmodule State do
+    @moduledoc false
 
-  defstruct [:bus_name, :bus]
+    defstruct [:bus_name, :bus]
+
+    def new(bus_name) do
+      %__MODULE__{bus_name: bus_name, bus: nil}
+    end
+
+    def put_bus(%__MODULE__{} = state, bus) do
+      %{state | bus: bus}
+    end
+  end
+
+  use GenServer
 
   @name __MODULE__
   @speed_hz 20_000_000
@@ -37,7 +49,7 @@ defmodule WaveShare13891.SPI do
   @impl true
   def init(bus_name) do
     send(self(), :open_spi)
-    state = new_state(bus_name)
+    state = State.new(bus_name)
 
     {:ok, state}
   end
@@ -46,7 +58,7 @@ defmodule WaveShare13891.SPI do
   def handle_info(:open_spi, state) do
     {:ok, bus} = Circuits.SPI.open(state.bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
 
-    {:noreply, put_bus(state, bus)}
+    {:noreply, State.put_bus(state, bus)}
   end
 
   @impl true
@@ -54,13 +66,5 @@ defmodule WaveShare13891.SPI do
     Circuits.SPI.transfer(state.bus, data)
 
     {:reply, data, state}
-  end
-
-  defp new_state(bus_name) do
-    %__MODULE__{bus_name: bus_name, bus: nil}
-  end
-
-  defp put_bus(%__MODULE__{} = state, bus) do
-    %{state | bus: bus}
   end
 end
