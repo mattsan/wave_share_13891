@@ -5,9 +5,11 @@ defmodule WaveShare13891.ST7735S do
   see https://files.waveshare.com/upload/e/e2/ST7735S_V1.1_20111121.pdf
   """
 
-  alias WaveShare13891.ST7735S.{GPIO, SPI}
+  use GenServer
 
   import Bitwise
+
+  alias Circuits.{GPIO, SPI}
 
   # Row Address Order bit (0: top to bottom, 1: bottom to top)
   @my 0x80
@@ -103,15 +105,49 @@ defmodule WaveShare13891.ST7735S do
           y_adjust :: non_neg_integer()
         }
 
+  @name __MODULE__
+  @default_bus_name "spidev0.0"
+  @speed_hz 20_000_000
+  @delay_us 0
+
+  # output pins
+  # @pin_out_lcd_cs 8
+  @pin_out_lcd_rst 27
+  @pin_out_lcd_dc 25
+  @pin_out_lcd_bl 24
+
+  @type pin_level() :: 0 | 1
+
+  defguard is_pin_level(value) when value in [0, 1]
+
+  @spec high?(integer(), integer()) :: boolean()
+  defmacrop high?(value, bit) do
+    quote do
+      (unquote(value) &&& unquote(bit)) != 0
+    end
+  end
+
+  @doc """
+  Starts server.
+
+  - `:name` - Server name (default: `#{inspect(@name)}`)
+  - `:spi_bus_name` - SPI bus name (default: `#{inspect(@default_bus_name)}`)
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts \\ []) when is_list(opts) do
+    name = Keyword.get(opts, :name, @name)
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
+
   @spec initialize(scanning_direction()) :: device_spec()
   def initialize(scanning_direction) do
     set_backlight(false)
 
     hardware_reset()
 
-    st7735r_frame_rate()
-    st7735r_power_sequence()
-    st7735r_gamma_sequence()
+    frame_rate()
+    power_sequence()
+    gamma_sequence()
 
     info = set_gram_scan_way(scanning_direction)
 
@@ -144,22 +180,22 @@ defmodule WaveShare13891.ST7735S do
         0
       end
 
-    GPIO.set_lcd_bl(value)
+    set_lcd_bl(value)
   end
 
   @spec hardware_reset :: :ok
   def hardware_reset do
-    GPIO.set_lcd_rst(1)
+    set_lcd_rst(1)
     :timer.sleep(100)
 
-    GPIO.set_lcd_rst(0)
+    set_lcd_rst(0)
     :timer.sleep(100)
 
-    GPIO.set_lcd_rst(1)
+    set_lcd_rst(1)
     :timer.sleep(100)
   end
 
-  def st7735r_frame_rate do
+  def frame_rate do
     # Set the frame frequency of the full colors normal mode.
     write_register(@register_frmctr1, <<0x01, 0x2C, 0x2D>>)
 
@@ -172,7 +208,7 @@ defmodule WaveShare13891.ST7735S do
     write_register(@register_invctr, <<0x07>>)
   end
 
-  def st7735r_power_sequence do
+  def power_sequence do
     write_register(@register_pwctr1, <<0xA2, 0x02, 0x84>>)
     write_register(@register_pwctr2, <<0xC5>>)
     write_register(@register_pwctr3, <<0x0A, 0x00>>)
@@ -181,7 +217,7 @@ defmodule WaveShare13891.ST7735S do
     write_register(@register_vmctr1, <<0x0E>>)
   end
 
-  def st7735r_gamma_sequence do
+  def gamma_sequence do
     write_register(
       @register_gmctrp1,
       <<0x0F, 0x1A, 0x0F, 0x18, 0x2F, 0x28, 0x20, 0x22, 0x1F, 0x1B, 0x23, 0x37, 0x00, 0x07, 0x02, 0x10>>
@@ -215,13 +251,6 @@ defmodule WaveShare13891.ST7735S do
     end
   end
 
-  @spec high?(integer(), integer()) :: boolean()
-  defmacrop high?(value, bit) do
-    quote do
-      (unquote(value) &&& unquote(bit)) != 0
-    end
-  end
-
   def set_gram_scan_way(scanning_direction) do
     memory_data_access_control = get_memory_data_access_control(scanning_direction)
 
@@ -248,12 +277,12 @@ defmodule WaveShare13891.ST7735S do
   end
 
   def select_register(register) do
-    GPIO.set_lcd_dc(0)
-    SPI.transfer(<<register>>)
+    set_lcd_dc(0)
+    transfer(<<register>>)
   end
 
   def write_data(data) do
-    GPIO.set_lcd_dc(1)
+    set_lcd_dc(1)
 
     Stream.unfold(data, fn data ->
       case String.split_at(data, 4096) do
@@ -261,6 +290,91 @@ defmodule WaveShare13891.ST7735S do
         tuple -> tuple
       end
     end)
-    |> Enum.each(&SPI.transfer/1)
+    |> Enum.each(&transfer/1)
+  end
+
+  @doc """
+  Transfers binary data.
+
+  - `data` - binary
+  """
+  @spec transfer(binary()) :: binary()
+  def transfer(pid \\ @name, data) when is_binary(data) do
+    GenServer.call(pid, {:transfer, data})
+  end
+
+  @spec set_lcd_cs(pin_level()) :: :ok
+  def set_lcd_cs(value) when is_pin_level(value) do
+    GenServer.call(@name, {:set, :lcd_cs, value})
+  end
+
+  @spec set_lcd_rst(pin_level()) :: :ok
+  def set_lcd_rst(value) when is_pin_level(value) do
+    GenServer.call(@name, {:set, :lcd_rst, value})
+  end
+
+  @spec set_lcd_dc(pin_level()) :: :ok
+  def set_lcd_dc(value) when is_pin_level(value) do
+    GenServer.call(@name, {:set, :lcd_dc, value})
+  end
+
+  @spec set_lcd_bl(pin_level()) :: :ok
+  def set_lcd_bl(value) when is_pin_level(value) do
+    GenServer.call(@name, {:set, :lcd_bl, value})
+  end
+
+  @impl true
+  def init(opts) do
+    spi_bus_name = Keyword.get(opts, :spi_bus_name, @default_bus_name)
+    state = %{}
+
+    send(self(), {:open_spi, spi_bus_name})
+    send(self(), :initialize_gpio)
+
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_info({:open_spi, spi_bus_name}, state) do
+    {:ok, spi_bus} = SPI.open(spi_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
+
+    {:noreply, Map.put(state, :spi_bus, spi_bus)}
+  end
+
+  def handle_info(:initialize_gpio, state) do
+    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
+    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
+    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
+    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
+
+    state =
+      state
+      |> Map.merge(%{
+        # lcd_cs: lcd_cs,
+        lcd_rst: lcd_rst,
+        lcd_dc: lcd_dc,
+        lcd_bl: lcd_bl
+      })
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_call({:transfer, data}, _from, state) do
+    SPI.transfer(state.spi_bus, data)
+
+    {:reply, data, state}
+  end
+
+  def handle_call({:set, port, value}, _from, state) do
+    case port do
+      :lcd_cs -> state.lcd_cs
+      :lcd_rst -> state.lcd_rst
+      :lcd_dc -> state.lcd_dc
+      :lcd_bl -> state.lcd_bl
+    end
+    |> GPIO.write(value)
+
+    {:reply, :ok, state}
   end
 end
