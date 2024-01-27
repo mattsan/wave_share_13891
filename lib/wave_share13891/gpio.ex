@@ -39,14 +39,18 @@ defmodule WaveShare13891.GPIO do
   defmodule State do
     @moduledoc false
 
-    defstruct [:event_listener, :pins]
+    defstruct [:event_listener, :input, :output]
 
     def new(event_listener) do
       %__MODULE__{event_listener: event_listener}
     end
 
-    def put_pins(%__MODULE__{} = state, %{} = pins) do
-      %{state | pins: pins}
+    def set_input(%__MODULE__{} = state, %{} = input) do
+      %{state | input: input}
+    end
+
+    def set_output(%__MODULE__{} = state, %{} = output) do
+      %{state | output: output}
     end
 
     def set_event_listener(%__MODULE__{} = state, event_listener) do
@@ -130,10 +134,10 @@ defmodule WaveShare13891.GPIO do
   @impl true
   def handle_call({:set, port, value}, _from, state) do
     case port do
-      :lcd_cs -> state.pins.lcd_cs
-      :lcd_rst -> state.pins.lcd_rst
-      :lcd_dc -> state.pins.lcd_dc
-      :lcd_bl -> state.pins.lcd_bl
+      :lcd_cs -> state.output.lcd_cs
+      :lcd_rst -> state.output.lcd_rst
+      :lcd_dc -> state.output.lcd_dc
+      :lcd_bl -> state.output.lcd_bl
     end
     |> GPIO.write(value)
 
@@ -146,9 +150,15 @@ defmodule WaveShare13891.GPIO do
 
   @impl true
   def handle_info(:initialize_pins, state) do
-    pins = initialize_pins()
+    input = initialize_input()
+    output = initialize_output()
 
-    {:noreply, State.put_pins(state, pins)}
+    state =
+      state
+      |> State.set_input(input)
+      |> State.set_output(output)
+
+    {:noreply, state}
   end
 
   def handle_info({:circuits_gpio, pin_number, timestamp, value}, state) do
@@ -167,12 +177,7 @@ defmodule WaveShare13891.GPIO do
     {:noreply, state}
   end
 
-  defp initialize_pins do
-    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
-    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
-    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
-    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
-
+  defp initialize_input do
     {:ok, up} = GPIO.open(@pin_in_up, :input, pull_mode: :pullup)
     {:ok, down} = GPIO.open(@pin_in_down, :input, pull_mode: :pullup)
     {:ok, left} = GPIO.open(@pin_in_left, :input, pull_mode: :pullup)
@@ -192,10 +197,6 @@ defmodule WaveShare13891.GPIO do
     GPIO.set_interrupts(key3, :both)
 
     %{
-      # lcd_cs: lcd_cs,
-      lcd_rst: lcd_rst,
-      lcd_dc: lcd_dc,
-      lcd_bl: lcd_bl,
       up: up,
       down: down,
       left: left,
@@ -204,6 +205,20 @@ defmodule WaveShare13891.GPIO do
       key1: key1,
       key2: key2,
       key3: key3
+    }
+  end
+
+  defp initialize_output do
+    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
+    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
+    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
+    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
+
+    %{
+      # lcd_cs: lcd_cs,
+      lcd_rst: lcd_rst,
+      lcd_dc: lcd_dc,
+      lcd_bl: lcd_bl
     }
   end
 
