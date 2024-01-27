@@ -5,7 +5,7 @@ defmodule WaveShare13891.ST7735S do
   see https://files.waveshare.com/upload/e/e2/ST7735S_V1.1_20111121.pdf
   """
 
-  alias WaveShare13891.{GPIO, SPI}
+  alias WaveShare13891.ST7735S.{GPIO, SPI}
 
   import Bitwise
 

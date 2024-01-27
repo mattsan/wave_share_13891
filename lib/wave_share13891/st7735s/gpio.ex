@@ -1,4 +1,4 @@
-defmodule WaveShare13891.GPIO do
+defmodule WaveShare13891.ST7735S.GPIO do
   @moduledoc """
   Waveshare 13891 GPIO interface module.
 
