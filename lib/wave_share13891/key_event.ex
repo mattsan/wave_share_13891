@@ -1,6 +1,29 @@
 defmodule WaveShare13891.KeyEvent do
   @moduledoc """
   Waveshare 13891 Key event dispatche server.
+
+  ## Start server
+
+  ```elixir
+  WaveShare13891.KeyEvent.start_link()
+  ```
+
+  ## Register subscribing keys
+
+  ```elixir
+  WaveShare13891.KeyEvent.register(:key1) # single key
+  WaveShare13891.KeyEvent.register([:key2, :key3]) # multiple keys
+  ```
+
+  ## Recieve key event message
+
+  ```elixir
+  {:key_event, key, timestamp, condition}
+  ```
+
+  - `key` - type of key
+  - `timestamp` - monotonic timestamp (see `Circuits.GPIO.set_interrupts/3`)
+  - `condition` - key condition (`:pressed` or `:released`)
   """
 
   use GenServer
@@ -27,8 +50,8 @@ defmodule WaveShare13891.KeyEvent do
   @doc """
   Starts key event dispatche server.
   """
-  @spec start_link(term()) :: GenServer.on_start()
-  def start_link(opts) do
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
@@ -52,12 +75,11 @@ defmodule WaveShare13891.KeyEvent do
   def register(key_or_keys, subscriber)
 
   def register(keys, subscriber) when is_list(keys) and is_pid(subscriber) do
-    keys
-    |> Enum.each(&register(&1, subscriber))
+    Enum.each(keys, &register(&1, subscriber))
   end
 
   def register(key, subscriber) when is_key(key) and is_pid(subscriber) do
-    GenServer.cast(@name, {:register, key, subscriber})
+    Registry.register(Registry.WaveShare13891, key, subscriber)
   end
 
   @impl true
@@ -68,17 +90,8 @@ defmodule WaveShare13891.KeyEvent do
   end
 
   @impl true
-  def handle_cast({:register, key, subscriber}, state) do
-    unless registered?(key, subscriber) do
-      {:ok, _pid} = Registry.register(Registry.WaveShare13891, key, subscriber)
-    end
-
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:circuits_gpio, pin_number, timestamp, value}, state) do
-    broadcast(pin_number_to_key(pin_number), timestamp, kind(value))
+  def handle_info({:circuits_gpio, gpio_number, timestamp, value}, state) do
+    broadcast(pin_number_to_key(gpio_number), timestamp, condition(value))
 
     {:noreply, state}
   end
@@ -114,16 +127,16 @@ defmodule WaveShare13891.KeyEvent do
     }
   end
 
-  defp registered?(key, subscriber) do
-    Registry.lookup(Registry.WaveShare13891, key)
-    |> Enum.any?(fn
-      {_, ^subscriber} -> true
-      _ -> false
+  defp broadcast(key, timestamp, condition) do
+    Registry.dispatch(Registry.WaveShare13891, key, fn entries ->
+      for {_pid, subscriber} <- entries do
+        send(subscriber, {:key_event, key, timestamp, condition})
+      end
     end)
   end
 
-  defp pin_number_to_key(pin_number) do
-    case pin_number do
+  defp pin_number_to_key(gpio_number) do
+    case gpio_number do
       @gpio_up -> :up
       @gpio_down -> :down
       @gpio_left -> :left
@@ -135,14 +148,10 @@ defmodule WaveShare13891.KeyEvent do
     end
   end
 
-  defp kind(0), do: :pressed
-  defp kind(1), do: :released
-
-  defp broadcast(key, timestamp, kind) do
-    Registry.dispatch(Registry.WaveShare13891, key, fn entries ->
-      for {_pid, subscriber} <- entries do
-        send(subscriber, {:key_event, key, timestamp, kind})
-      end
-    end)
+  defp condition(value) do
+    case value do
+      0 -> :pressed
+      1 -> :released
+    end
   end
 end
