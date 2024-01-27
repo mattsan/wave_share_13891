@@ -36,28 +36,6 @@ defmodule WaveShare13891.GPIO do
   | BL             | P24              | Backlight            | `set_lcd_bl/1`  |
   """
 
-  defmodule State do
-    @moduledoc false
-
-    defstruct [:event_listener, :input, :output]
-
-    def new(event_listener) do
-      %__MODULE__{event_listener: event_listener}
-    end
-
-    def set_input(%__MODULE__{} = state, %{} = input) do
-      %{state | input: input}
-    end
-
-    def set_output(%__MODULE__{} = state, %{} = output) do
-      %{state | output: output}
-    end
-
-    def set_event_listener(%__MODULE__{} = state, event_listener) do
-      %{state | event_listener: event_listener}
-    end
-  end
-
   use GenServer
 
   alias Circuits.GPIO
@@ -70,26 +48,12 @@ defmodule WaveShare13891.GPIO do
   @pin_out_lcd_dc 25
   @pin_out_lcd_bl 24
 
-  # input pins
-  @pin_in_up 6
-  @pin_in_down 19
-  @pin_in_left 5
-  @pin_in_right 26
-  @pin_in_press 13
-  @pin_in_key1 21
-  @pin_in_key2 20
-  @pin_in_key3 16
-
   @type pin_level() :: 0 | 1
 
   defguard is_pin_level(value) when value in [0, 1]
 
   @doc """
   Starts GPIO server.
-
-  ## Options
-
-  - `:event_listener` - A listner process receiving key events (type: [`Proces.dist()`](https://hexdocs.pm/elixir/Process.html#t:dest/0))
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
@@ -116,15 +80,9 @@ defmodule WaveShare13891.GPIO do
     GenServer.call(@name, {:set, :lcd_bl, value})
   end
 
-  @spec set_event_listener(Process.dest()) :: :ok
-  def set_event_listener(event_listener) do
-    GenServer.call(@name, {:set_event_listener, event_listener})
-  end
-
   @impl true
-  def init(opts) do
-    event_listener = Keyword.get(opts, :event_listener)
-    state = State.new(event_listener)
+  def init(_opts) do
+    state = %{}
 
     send(self(), :initialize_pins)
 
@@ -134,104 +92,30 @@ defmodule WaveShare13891.GPIO do
   @impl true
   def handle_call({:set, port, value}, _from, state) do
     case port do
-      :lcd_cs -> state.output.lcd_cs
-      :lcd_rst -> state.output.lcd_rst
-      :lcd_dc -> state.output.lcd_dc
-      :lcd_bl -> state.output.lcd_bl
+      :lcd_cs -> state.lcd_cs
+      :lcd_rst -> state.lcd_rst
+      :lcd_dc -> state.lcd_dc
+      :lcd_bl -> state.lcd_bl
     end
     |> GPIO.write(value)
 
     {:reply, :ok, state}
   end
 
-  def handle_call({:set_event_listener, event_listener}, _from, state) do
-    {:reply, :ok, State.set_event_listener(state, event_listener)}
-  end
-
   @impl true
-  def handle_info(:initialize_pins, state) do
-    input = initialize_input()
-    output = initialize_output()
-
-    state =
-      state
-      |> State.set_input(input)
-      |> State.set_output(output)
-
-    {:noreply, state}
-  end
-
-  def handle_info({:circuits_gpio, pin_number, timestamp, value}, state) do
-    if state.event_listener do
-      key = pin_number_to_key(pin_number)
-
-      kind =
-        case value do
-          0 -> :pressed
-          1 -> :released
-        end
-
-      send(state.event_listener, {:key_event, key, timestamp, kind})
-    end
-
-    {:noreply, state}
-  end
-
-  defp initialize_input do
-    {:ok, up} = GPIO.open(@pin_in_up, :input, pull_mode: :pullup)
-    {:ok, down} = GPIO.open(@pin_in_down, :input, pull_mode: :pullup)
-    {:ok, left} = GPIO.open(@pin_in_left, :input, pull_mode: :pullup)
-    {:ok, right} = GPIO.open(@pin_in_right, :input, pull_mode: :pullup)
-    {:ok, press} = GPIO.open(@pin_in_press, :input, pull_mode: :pullup)
-    {:ok, key1} = GPIO.open(@pin_in_key1, :input, pull_mode: :pullup)
-    {:ok, key2} = GPIO.open(@pin_in_key2, :input, pull_mode: :pullup)
-    {:ok, key3} = GPIO.open(@pin_in_key3, :input, pull_mode: :pullup)
-
-    GPIO.set_interrupts(up, :both)
-    GPIO.set_interrupts(down, :both)
-    GPIO.set_interrupts(left, :both)
-    GPIO.set_interrupts(right, :both)
-    GPIO.set_interrupts(press, :both)
-    GPIO.set_interrupts(key1, :both)
-    GPIO.set_interrupts(key2, :both)
-    GPIO.set_interrupts(key3, :both)
-
-    %{
-      up: up,
-      down: down,
-      left: left,
-      right: right,
-      press: press,
-      key1: key1,
-      key2: key2,
-      key3: key3
-    }
-  end
-
-  defp initialize_output do
+  def handle_info(:initialize_pins, _state) do
     # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
     {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
     {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
     {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
 
-    %{
+    state = %{
       # lcd_cs: lcd_cs,
       lcd_rst: lcd_rst,
       lcd_dc: lcd_dc,
       lcd_bl: lcd_bl
     }
-  end
 
-  defp pin_number_to_key(pin_number) do
-    case pin_number do
-      @pin_in_up -> :up
-      @pin_in_down -> :down
-      @pin_in_left -> :left
-      @pin_in_right -> :right
-      @pin_in_press -> :press
-      @pin_in_key1 -> :key1
-      @pin_in_key2 -> :key2
-      @pin_in_key3 -> :key3
-    end
+    {:noreply, state}
   end
 end

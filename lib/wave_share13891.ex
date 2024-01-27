@@ -30,7 +30,7 @@ defmodule WaveShare13891 do
     children = [
       {Registry, keys: :duplicate, name: Registry.WaveShare13891},
       WaveShare13891.KeyEvent,
-      {WaveShare13891.GPIO, event_listener: WaveShare13891.KeyEvent},
+      WaveShare13891.GPIO,
       WaveShare13891.SPI,
       WaveShare13891.LCD
     ]
