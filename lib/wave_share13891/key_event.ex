@@ -55,22 +55,11 @@ defmodule WaveShare13891.KeyEvent do
     GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
-  @doc """
-  Registers the process subscribing key events.
-
-  - `key_or_keys` - subscribing key(s)
-  """
   @spec register(key() | [key()]) :: :ok
   def register(key_or_keys) when is_list(key_or_keys) or is_key(key_or_keys) do
     register(key_or_keys, self())
   end
 
-  @doc """
-  Registers a process subscribing key events.
-
-  - `key_or_keys` - subscribing key(s)
-  - `subscriber` - process id
-  """
   @spec register(key() | [key()], pid()) :: :ok
   def register(key_or_keys, subscriber)
 
