@@ -88,6 +88,17 @@ defmodule WaveShare13891.ST7735S do
   # RAMWR (2Ch): Memory Write
   @register_ramwr 0x2C
 
+  @name __MODULE__
+  @default_bus_name "spidev0.0"
+  @speed_hz 20_000_000
+  @delay_us 0
+
+  # output pins
+  # @pin_out_lcd_cs 8
+  @pin_out_lcd_rst 27
+  @pin_out_lcd_dc 25
+  @pin_out_lcd_bl 24
+
   @type scanning_direction() ::
           :l2r_u2d
           | :l2r_d2u
@@ -104,17 +115,6 @@ defmodule WaveShare13891.ST7735S do
           x_adjust :: non_neg_integer(),
           y_adjust :: non_neg_integer()
         }
-
-  @name __MODULE__
-  @default_bus_name "spidev0.0"
-  @speed_hz 20_000_000
-  @delay_us 0
-
-  # output pins
-  # @pin_out_lcd_cs 8
-  @pin_out_lcd_rst 27
-  @pin_out_lcd_dc 25
-  @pin_out_lcd_bl 24
 
   @type pin_level() :: 0 | 1
 
@@ -139,19 +139,22 @@ defmodule WaveShare13891.ST7735S do
     GenServer.start_link(__MODULE__, opts, name: name)
   end
 
+  @doc """
+  see
+  - https://www.waveshare.com/wiki/1.44inch_LCD_HAT#Demo
+  - https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z
+  """
   @spec initialize(scanning_direction()) :: device_spec()
   def initialize(scanning_direction) do
     set_backlight(false)
 
     hardware_reset()
 
-    frame_rate()
-    power_sequence()
-    gamma_sequence()
+    set_initialization_register()
 
     info = set_gram_scan_way(scanning_direction)
 
-    :timer.sleep(200)
+    :timer.sleep(100)
 
     sleep_out()
 
@@ -160,15 +163,6 @@ defmodule WaveShare13891.ST7735S do
     turn_on_lcd_display()
 
     info
-  end
-
-  def set_window(x_start, y_start, x_end, y_end, x_adjust, y_adjust) do
-    x_parameter = <<0x00, rem(x_start, 0x100) + x_adjust, 0x00, rem(x_end, 0x100) + x_adjust>>
-    y_parameter = <<0x00, rem(y_start, 0x100) + y_adjust, 0x00, rem(y_end, 0x100) + y_adjust>>
-
-    write_register(@register_caset, x_parameter)
-    write_register(@register_raset, y_parameter)
-    select_register(@register_ramwr)
   end
 
   @spec set_backlight(boolean()) :: :ok
@@ -183,6 +177,27 @@ defmodule WaveShare13891.ST7735S do
     set_lcd_bl(value)
   end
 
+  def set_window(x_start, y_start, x_end, y_end, x_adjust, y_adjust) do
+    x_parameter = <<0x00, rem(x_start, 0x100) + x_adjust, 0x00, rem(x_end, 0x100) + x_adjust>>
+    y_parameter = <<0x00, rem(y_start, 0x100) + y_adjust, 0x00, rem(y_end, 0x100) + y_adjust>>
+
+    write_register(@register_caset, x_parameter)
+    write_register(@register_raset, y_parameter)
+    select_register(@register_ramwr)
+  end
+
+  def write_data(data) do
+    set_lcd_dc(1)
+
+    Stream.unfold(data, fn data ->
+      case String.split_at(data, 4096) do
+        {"", ""} -> nil
+        tuple -> tuple
+      end
+    end)
+    |> Enum.each(&transfer/1)
+  end
+
   @spec hardware_reset :: :ok
   def hardware_reset do
     set_lcd_rst(1)
@@ -195,16 +210,27 @@ defmodule WaveShare13891.ST7735S do
     :timer.sleep(100)
   end
 
+  def set_initialization_register do
+    frame_rate()
+    column_inversion()
+    power_sequence()
+    vcom()
+    gamma_sequence()
+    enable_test_command()
+    disable_ram_power_save_mode()
+    mode_65k()
+  end
+
   def frame_rate do
     # Set the frame frequency of the full colors normal mode.
     write_register(@register_frmctr1, <<0x01, 0x2C, 0x2D>>)
-
     # Set the frame frequency of the Idle mode.
     write_register(@register_frmctr2, <<0x01, 0x2C, 0x2D>>)
-
     # Set the frame frequency of the Partial mode/ full colors.
     write_register(@register_frmctr3, <<0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D>>)
+  end
 
+  def column_inversion do
     write_register(@register_invctr, <<0x07>>)
   end
 
@@ -214,6 +240,9 @@ defmodule WaveShare13891.ST7735S do
     write_register(@register_pwctr3, <<0x0A, 0x00>>)
     write_register(@register_pwctr4, <<0x8A, 0x2A, 0xC4, 0x8A, 0xEE>>)
     write_register(@register_pwctr5, <<0x8A, 0xEE>>)
+  end
+
+  def vcom do
     write_register(@register_vmctr1, <<0x0E>>)
   end
 
@@ -227,28 +256,18 @@ defmodule WaveShare13891.ST7735S do
       @register_gmctrn1,
       <<0x0F, 0x1B, 0x0F, 0x17, 0x33, 0x2C, 0x29, 0x2E, 0x30, 0x30, 0x39, 0x3F, 0x00, 0x07, 0x03, 0x10>>
     )
-
-    # Enable test command
-    write_register(0xF0, <<0x01>>)
-
-    # Disable ram power save mode
-    write_register(0xF6, <<0x00>>)
-
-    # 65k mode
-    write_register(@register_colmod, <<0x05>>)
   end
 
-  defp get_memory_data_access_control(scanning_direction) do
-    case scanning_direction do
-      :l2r_u2d -> 0
-      :l2r_d2u -> @my
-      :r2l_u2d -> @mx
-      :r2l_d2u -> @mx ||| @my
-      :u2d_l2r -> @mv
-      :u2d_r2l -> @mv ||| @mx
-      :d2u_l2r -> @mv ||| @my
-      :d2u_r2l -> @mv ||| @mx ||| @my
-    end
+  def enable_test_command do
+    write_register(0xF0, <<0x01>>)
+  end
+
+  def disable_ram_power_save_mode do
+    write_register(0xF6, <<0x00>>)
+  end
+
+  def mode_65k do
+    write_register(@register_colmod, <<0x05>>)
   end
 
   def set_gram_scan_way(scanning_direction) do
@@ -260,6 +279,19 @@ defmodule WaveShare13891.ST7735S do
       {@width, @height, @y_adjust, @x_adjust}
     else
       {@height, @width, @x_adjust, @y_adjust}
+    end
+  end
+
+  def get_memory_data_access_control(scanning_direction) do
+    case scanning_direction do
+      :l2r_u2d -> 0
+      :l2r_d2u -> @my
+      :r2l_u2d -> @mx
+      :r2l_d2u -> @mx ||| @my
+      :u2d_l2r -> @mv
+      :u2d_r2l -> @mv ||| @mx
+      :d2u_l2r -> @mv ||| @my
+      :d2u_r2l -> @mv ||| @mx ||| @my
     end
   end
 
@@ -279,28 +311,6 @@ defmodule WaveShare13891.ST7735S do
   def select_register(register) do
     set_lcd_dc(0)
     transfer(<<register>>)
-  end
-
-  def write_data(data) do
-    set_lcd_dc(1)
-
-    Stream.unfold(data, fn data ->
-      case String.split_at(data, 4096) do
-        {"", ""} -> nil
-        tuple -> tuple
-      end
-    end)
-    |> Enum.each(&transfer/1)
-  end
-
-  @doc """
-  Transfers binary data.
-
-  - `data` - binary
-  """
-  @spec transfer(binary()) :: binary()
-  def transfer(pid \\ @name, data) when is_binary(data) do
-    GenServer.call(pid, {:transfer, data})
   end
 
   @spec set_lcd_cs(pin_level()) :: :ok
@@ -323,47 +333,41 @@ defmodule WaveShare13891.ST7735S do
     GenServer.call(@name, {:set, :lcd_bl, value})
   end
 
+  @doc """
+  Transfers binary data.
+
+  - `data` - binary
+  """
+  @spec transfer(binary()) :: binary()
+  def transfer(pid \\ @name, data) when is_binary(data) do
+    GenServer.call(pid, {:transfer, data})
+  end
+
   @impl true
   def init(opts) do
     spi_bus_name = Keyword.get(opts, :spi_bus_name, @default_bus_name)
-    state = %{}
+    state = %{lcd_rst: nil, lcd_dc: nil, lcd_bl: nil, spi_bus: nil}
 
-    send(self(), {:open_spi, spi_bus_name})
     send(self(), :initialize_gpio)
+    send(self(), {:initialize_spi, spi_bus_name})
 
     {:ok, state}
   end
 
   @impl true
-  def handle_info({:open_spi, spi_bus_name}, state) do
-    {:ok, spi_bus} = SPI.open(spi_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
-
-    {:noreply, Map.put(state, :spi_bus, spi_bus)}
-  end
-
   def handle_info(:initialize_gpio, state) do
     # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
     {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
     {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
     {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
 
-    state =
-      state
-      |> Map.merge(%{
-        # lcd_cs: lcd_cs,
-        lcd_rst: lcd_rst,
-        lcd_dc: lcd_dc,
-        lcd_bl: lcd_bl
-      })
-
-    {:noreply, state}
+    {:noreply, %{state | lcd_rst: lcd_rst, lcd_dc: lcd_dc, lcd_bl: lcd_bl}}
   end
 
-  @impl true
-  def handle_call({:transfer, data}, _from, state) do
-    SPI.transfer(state.spi_bus, data)
+  def handle_info({:initialize_spi, spi_bus_name}, state) do
+    {:ok, spi_bus} = SPI.open(spi_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
 
-    {:reply, data, state}
+    {:noreply, %{state | spi_bus: spi_bus}}
   end
 
   def handle_call({:set, port, value}, _from, state) do
@@ -374,6 +378,13 @@ defmodule WaveShare13891.ST7735S do
       :lcd_bl -> state.lcd_bl
     end
     |> GPIO.write(value)
+
+    {:reply, :ok, state}
+  end
+
+  @impl true
+  def handle_call({:transfer, data}, _from, state) do
+    SPI.transfer(state.spi_bus, data)
 
     {:reply, :ok, state}
   end
