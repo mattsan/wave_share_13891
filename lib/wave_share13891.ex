@@ -60,7 +60,7 @@ defmodule WaveShare13891 do
 
   ## Options
 
-  - `:name` - supervisor's name (default: `WaveShare13891`)
+  - `:name` - supervisor's name (default: `#{inspect(@name)}`)
   """
   def start_link(opts) do
     name = Keyword.get(opts, :name, @name)
@@ -68,22 +68,13 @@ defmodule WaveShare13891 do
   end
 
   @doc """
-  Registers self process subscribing key events.
-
-  - `key_or_keys` - subscribing key(s)
-  """
-  @spec register(WaveShare13891.KeyEvent.key() | [WaveShare13891.KeyEvent.key()]) :: :ok
-
-  defdelegate register(key_or_keys), to: WaveShare13891.KeyEvent
-
-  @doc """
   Registers a process subscribing key events.
 
   - `key_or_keys` - subscribing key(s)
-  - `subscriber` - process id
+  - `subscriber` - process id (default `self()`)
   """
   @spec register(WaveShare13891.KeyEvent.key() | [WaveShare13891.KeyEvent.key()], pid()) :: :ok
-  defdelegate register(key_or_keys, subscriber), to: WaveShare13891.KeyEvent
+  defdelegate register(key_or_keys, subscriber \\ self()), to: WaveShare13891.KeyEvent
 
   @doc """
   Sets window area.
