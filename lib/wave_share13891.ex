@@ -13,6 +13,42 @@ defmodule WaveShare13891 do
   |           Cirsuits.GPIO           | Cirsuits.SPI |
   +-----------------------------------+--------------+
   ```
+
+  ## LCD
+
+  ### Turns backlight on or off
+
+  ```elixir
+  WaveShare13891.set_backlight(true)  # on
+  WaveShare13891.set_backlight(false) # off
+  ```
+
+  ### Writes image
+
+  ```elixir
+  WaveShare13891.set_window(0, 0, 7, 7)
+  WaveShare13891.write_data(<<0::unit(16)-size(8 * 8)>>)
+  ```
+
+  ## Key events
+
+  ### Register subscribing keys
+
+  ```elixir
+  WaveShare13891.register(:key1)          # single key
+  # or
+  WaveShare13891.register([:key2, :key3]) # multiple keys
+  ```
+
+  ### Recieve key event message
+
+  ```elixir
+  {:key_event, key, timestamp, condition}
+  ```
+
+  - `key` - type of key (see [`WaveShare13891.KeyEvent.key`](WaveShare13891.KeyEvent.html#t:key/0)())
+  - `timestamp` - monotonic timestamp (see `Circuits.GPIO.set_interrupts/3`)
+  - `condition` - key condition (`:pressed` or `:released`)
   """
 
   use Supervisor

@@ -1,29 +1,6 @@
 defmodule WaveShare13891.KeyEvent do
   @moduledoc """
   Waveshare 13891 Key event dispatche server.
-
-  ## Start server
-
-  ```elixir
-  WaveShare13891.KeyEvent.start_link()
-  ```
-
-  ## Register subscribing keys
-
-  ```elixir
-  WaveShare13891.KeyEvent.register(:key1) # single key
-  WaveShare13891.KeyEvent.register([:key2, :key3]) # multiple keys
-  ```
-
-  ## Recieve key event message
-
-  ```elixir
-  {:key_event, key, timestamp, condition}
-  ```
-
-  - `key` - type of key
-  - `timestamp` - monotonic timestamp (see `Circuits.GPIO.set_interrupts/3`)
-  - `condition` - key condition (`:pressed` or `:released`)
   """
 
   use GenServer
