@@ -30,6 +30,8 @@ defmodule WaveShare13891.MixProject do
 
   def docs do
     [
+      main: "readme",
+      extras: ["README.md"],
       groups_for_functions: [
         Guards: & &1[:guard]
       ]
