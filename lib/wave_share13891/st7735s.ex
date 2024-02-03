@@ -5,6 +5,53 @@ defmodule WaveShare13891.ST7735S do
   see https://files.waveshare.com/upload/e/e2/ST7735S_V1.1_20111121.pdf
   """
 
+  defmodule Handles do
+    @moduledoc false
+
+    defstruct width: nil,
+              height: nil,
+              scanning_direction: nil,
+              x_adjust: nil,
+              y_adjust: nil,
+              lcd_cs: nil,
+              lcd_rst: nil,
+              lcd_dc: nil,
+              lcd_bl: nil,
+              spi_bus: nil
+
+    def new do
+      %__MODULE__{}
+    end
+
+    def set_scanning_direction(handles, scanning_direction) do
+      %{handles | scanning_direction: scanning_direction}
+    end
+
+    def set_gram_scan_way(handles, width, height, x_adjust, y_adjust) do
+      %{handles | width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust}
+    end
+
+    def set_lcd_cs(handles, value) do
+      %{handles | lcd_cs: value}
+    end
+
+    def set_lcd_rst(handles, value) do
+      %{handles | lcd_rst: value}
+    end
+
+    def set_lcd_dc(handles, value) do
+      %{handles | lcd_dc: value}
+    end
+
+    def set_lcd_bl(handles, value) do
+      %{handles | lcd_bl: value}
+    end
+
+    def set_spi_bus(handles, value) do
+      %{handles | spi_bus: value}
+    end
+  end
+
   import Bitwise
 
   alias Circuits.{GPIO, SPI}
@@ -137,17 +184,19 @@ defmodule WaveShare13891.ST7735S do
     end
   end
 
-  def initialize_gpio do
+  def initialize_gpio(handles) do
     # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
     {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
     {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
     {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
 
-    [lcd_rst, lcd_dc, lcd_bl]
+    %{handles | lcd_rst: lcd_rst, lcd_dc: lcd_dc, lcd_bl: lcd_bl}
   end
 
-  def initialize_spi(spi_bus_name \\ @default_bus_name) do
-    SPI.open(spi_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
+  def initialize_spi(handles) do
+    {:ok, spi_bus} = SPI.open(@default_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
+
+    %{handles | spi_bus: spi_bus}
   end
 
   @doc """
@@ -155,27 +204,33 @@ defmodule WaveShare13891.ST7735S do
   - https://www.waveshare.com/wiki/1.44inch_LCD_HAT#Demo
   - https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z
   """
-  def initialize(state, scanning_direction) do
-    set_backlight(state, false)
+  def initialize(handles, scanning_direction) do
+    handles =
+      handles
+      |> Handles.set_scanning_direction(scanning_direction)
+      |> initialize_gpio()
+      |> initialize_spi()
 
-    hardware_reset(state)
+    set_backlight(handles, false)
 
-    set_initialization_register(state)
+    hardware_reset(handles)
 
-    info = set_gram_scan_way(state, scanning_direction)
+    set_initialization_register(handles)
+
+    {width, height, x_adjust, y_adjust} = set_gram_scan_way(handles, handles.scanning_direction)
 
     :timer.sleep(100)
 
-    sleep_out(state)
+    sleep_out(handles)
 
     :timer.sleep(120)
 
-    turn_on_lcd_display(state)
+    turn_on_lcd_display(handles)
 
-    info
+    Handles.set_gram_scan_way(handles, width, height, x_adjust, y_adjust)
   end
 
-  def set_backlight(state, condition) do
+  def set_backlight(handles, condition) do
     value =
       if condition do
         1
@@ -183,20 +238,20 @@ defmodule WaveShare13891.ST7735S do
         0
       end
 
-    set_lcd_bl(state, value)
+    set_lcd_bl(handles, value)
   end
 
-  def set_window(state, x_start, y_start, x_end, y_end, x_adjust, y_adjust) do
+  def set_window(handles, x_start, y_start, x_end, y_end, x_adjust, y_adjust) do
     x_parameter = <<0x00, rem(x_start, 0x100) + x_adjust, 0x00, rem(x_end, 0x100) + x_adjust>>
     y_parameter = <<0x00, rem(y_start, 0x100) + y_adjust, 0x00, rem(y_end, 0x100) + y_adjust>>
 
-    write_register(state, @register_caset, x_parameter)
-    write_register(state, @register_raset, y_parameter)
-    select_register(state, @register_ramwr)
+    write_register(handles, @register_caset, x_parameter)
+    write_register(handles, @register_raset, y_parameter)
+    select_register(handles, @register_ramwr)
   end
 
-  def write_data(state, data) do
-    set_lcd_dc(state, 1)
+  def write_data(handles, data) do
+    set_lcd_dc(handles, 1)
 
     Stream.unfold(data, fn data ->
       case String.split_at(data, 256) do
@@ -204,86 +259,86 @@ defmodule WaveShare13891.ST7735S do
         tuple -> tuple
       end
     end)
-    |> Enum.each(&transfer(state, &1))
+    |> Enum.each(&transfer(handles, &1))
   end
 
-  def hardware_reset(state) do
-    set_lcd_rst(state, 1)
+  def hardware_reset(handles) do
+    set_lcd_rst(handles, 1)
     :timer.sleep(100)
 
-    set_lcd_rst(state, 0)
+    set_lcd_rst(handles, 0)
     :timer.sleep(100)
 
-    set_lcd_rst(state, 1)
+    set_lcd_rst(handles, 1)
     :timer.sleep(100)
   end
 
-  def set_initialization_register(state) do
-    frame_rate(state)
-    column_inversion(state)
-    power_sequence(state)
-    vcom(state)
-    gamma_sequence(state)
-    enable_test_command(state)
-    disable_ram_power_save_mode(state)
-    mode_65k(state)
+  def set_initialization_register(handles) do
+    frame_rate(handles)
+    column_inversion(handles)
+    power_sequence(handles)
+    vcom(handles)
+    gamma_sequence(handles)
+    enable_test_command(handles)
+    disable_ram_power_save_mode(handles)
+    mode_65k(handles)
   end
 
-  def frame_rate(state) do
+  def frame_rate(handles) do
     # Set the frame frequency of the full colors normal mode.
-    write_register(state, @register_frmctr1, <<0x01, 0x2C, 0x2D>>)
+    write_register(handles, @register_frmctr1, <<0x01, 0x2C, 0x2D>>)
     # Set the frame frequency of the Idle mode.
-    write_register(state, @register_frmctr2, <<0x01, 0x2C, 0x2D>>)
+    write_register(handles, @register_frmctr2, <<0x01, 0x2C, 0x2D>>)
     # Set the frame frequency of the Partial mode/ full colors.
-    write_register(state, @register_frmctr3, <<0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D>>)
+    write_register(handles, @register_frmctr3, <<0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D>>)
   end
 
-  def column_inversion(state) do
-    write_register(state, @register_invctr, <<0x07>>)
+  def column_inversion(handles) do
+    write_register(handles, @register_invctr, <<0x07>>)
   end
 
-  def power_sequence(state) do
-    write_register(state, @register_pwctr1, <<0xA2, 0x02, 0x84>>)
-    write_register(state, @register_pwctr2, <<0xC5>>)
-    write_register(state, @register_pwctr3, <<0x0A, 0x00>>)
-    write_register(state, @register_pwctr4, <<0x8A, 0x2A, 0xC4, 0x8A, 0xEE>>)
-    write_register(state, @register_pwctr5, <<0x8A, 0xEE>>)
+  def power_sequence(handles) do
+    write_register(handles, @register_pwctr1, <<0xA2, 0x02, 0x84>>)
+    write_register(handles, @register_pwctr2, <<0xC5>>)
+    write_register(handles, @register_pwctr3, <<0x0A, 0x00>>)
+    write_register(handles, @register_pwctr4, <<0x8A, 0x2A, 0xC4, 0x8A, 0xEE>>)
+    write_register(handles, @register_pwctr5, <<0x8A, 0xEE>>)
   end
 
-  def vcom(state) do
-    write_register(state, @register_vmctr1, <<0x0E>>)
+  def vcom(handles) do
+    write_register(handles, @register_vmctr1, <<0x0E>>)
   end
 
-  def gamma_sequence(state) do
+  def gamma_sequence(handles) do
     write_register(
-      state,
+      handles,
       @register_gmctrp1,
       <<0x0F, 0x1A, 0x0F, 0x18, 0x2F, 0x28, 0x20, 0x22, 0x1F, 0x1B, 0x23, 0x37, 0x00, 0x07, 0x02, 0x10>>
     )
 
     write_register(
-      state,
+      handles,
       @register_gmctrn1,
       <<0x0F, 0x1B, 0x0F, 0x17, 0x33, 0x2C, 0x29, 0x2E, 0x30, 0x30, 0x39, 0x3F, 0x00, 0x07, 0x03, 0x10>>
     )
   end
 
-  def enable_test_command(state) do
-    write_register(state, 0xF0, <<0x01>>)
+  def enable_test_command(handles) do
+    write_register(handles, 0xF0, <<0x01>>)
   end
 
-  def disable_ram_power_save_mode(state) do
-    write_register(state, 0xF6, <<0x00>>)
+  def disable_ram_power_save_mode(handles) do
+    write_register(handles, 0xF6, <<0x00>>)
   end
 
-  def mode_65k(state) do
-    write_register(state, @register_colmod, <<0x05>>)
+  def mode_65k(handles) do
+    write_register(handles, @register_colmod, <<0x05>>)
   end
 
-  def set_gram_scan_way(state, scanning_direction) do
+  def set_gram_scan_way(handles, scanning_direction) do
     memory_data_access_control = get_memory_data_access_control(scanning_direction)
 
-    write_register(state, @register_madctl, <<memory_data_access_control ||| @rgb_order>>)
+    write_register(handles, @register_madctl, <<memory_data_access_control ||| @rgb_order>>)
 
     if high?(memory_data_access_control, @mv) do
       {@width, @height, @y_adjust, @x_adjust}
@@ -292,51 +347,51 @@ defmodule WaveShare13891.ST7735S do
     end
   end
 
-  def sleep_out(state) do
-    select_register(state, @register_slpout)
+  def sleep_out(handles) do
+    select_register(handles, @register_slpout)
   end
 
-  def turn_on_lcd_display(state) do
-    select_register(state, @register_dispon)
+  def turn_on_lcd_display(handles) do
+    select_register(handles, @register_dispon)
   end
 
-  def select_register(state, register) do
-    set_lcd_dc(state, 0)
-    transfer(state, <<register>>)
+  def write_register(handles, register, data) do
+    select_register(handles, register)
+    write_data(handles, data)
   end
 
-  def set_lcd_cs(state, value) do
-    set(state, :lcd_cs, value)
+  def transfer(handles, data) do
+    SPI.transfer(handles.spi_bus, data)
   end
 
-  def set_lcd_rst(state, value) do
-    set(state, :lcd_rst, value)
+  defp select_register(handles, register) do
+    set_lcd_dc(handles, 0)
+    transfer(handles, <<register>>)
   end
 
-  def set_lcd_dc(state, value) do
-    set(state, :lcd_dc, value)
+  defp set_lcd_cs(handles, value) do
+    set(handles, :lcd_cs, value)
   end
 
-  def set_lcd_bl(state, value) do
-    set(state, :lcd_bl, value)
+  defp set_lcd_rst(handles, value) do
+    set(handles, :lcd_rst, value)
   end
 
-  def write_register(state, register, data) do
-    select_register(state, register)
-    write_data(state, data)
+  defp set_lcd_dc(handles, value) do
+    set(handles, :lcd_dc, value)
   end
 
-  def set(state, port, value) do
+  defp set_lcd_bl(handles, value) do
+    set(handles, :lcd_bl, value)
+  end
+
+  defp set(handles, port, value) do
     case port do
-      :lcd_cs -> state.lcd_cs
-      :lcd_rst -> state.lcd_rst
-      :lcd_dc -> state.lcd_dc
-      :lcd_bl -> state.lcd_bl
+      :lcd_cs -> handles.lcd_cs
+      :lcd_rst -> handles.lcd_rst
+      :lcd_dc -> handles.lcd_dc
+      :lcd_bl -> handles.lcd_bl
     end
     |> GPIO.write(value)
-  end
-
-  def transfer(state, data) do
-    SPI.transfer(state.spi_bus, data)
   end
 end

@@ -3,52 +3,10 @@ defmodule WaveShare13891.LCD do
   Waveshare 13891 LCD server.
   """
 
-  defmodule State do
-    @moduledoc false
-
-    defstruct width: nil,
-              height: nil,
-              scanning_direction: nil,
-              x_adjust: nil,
-              y_adjust: nil,
-              lcd_cs: nil,
-              lcd_rst: nil,
-              lcd_dc: nil,
-              lcd_bl: nil,
-              spi_bus: nil
-
-    def new(scanning_direction) do
-      %__MODULE__{scanning_direction: scanning_direction}
-    end
-
-    def set_gram_scan_way(state, width, height, x_adjust, y_adjust) do
-      %{state | width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust}
-    end
-
-    def set_lcd_cs(state, value) do
-      %{state | lcd_cs: value}
-    end
-
-    def set_lcd_rst(state, value) do
-      %{state | lcd_rst: value}
-    end
-
-    def set_lcd_dc(state, value) do
-      %{state | lcd_dc: value}
-    end
-
-    def set_lcd_bl(state, value) do
-      %{state | lcd_bl: value}
-    end
-
-    def set_spi_bus(state, value) do
-      %{state | spi_bus: value}
-    end
-  end
-
   use GenServer
 
   alias WaveShare13891.ST7735S
+  alias WaveShare13891.ST7735S.Handles
 
   @name __MODULE__
 
@@ -78,28 +36,20 @@ defmodule WaveShare13891.LCD do
   @impl true
   def init(opts) do
     scanning_direction = Keyword.get(opts, :scanning_direction, :u2d_r2l)
-    state = State.new(scanning_direction)
+    state = Handles.new()
 
-    send(self(), :init_lcd)
+    send(self(), {:init_lcd, scanning_direction})
 
     {:ok, state}
   end
 
   @impl true
-  def handle_info(:init_lcd, state) do
-    [lcd_rst, lcd_dc, lcd_bl] = ST7735S.initialize_gpio()
-    {:ok, spi_bus} = ST7735S.initialize_spi()
-
+  def handle_info({:init_lcd, scanning_direction}, state) do
     state =
       state
-      |> State.set_lcd_rst(lcd_rst)
-      |> State.set_lcd_dc(lcd_dc)
-      |> State.set_lcd_bl(lcd_bl)
-      |> State.set_spi_bus(spi_bus)
+      |> ST7735S.initialize(scanning_direction)
 
-    {width, height, x_adjust, y_adjust} = ST7735S.initialize(state, state.scanning_direction)
-
-    {:noreply, State.set_gram_scan_way(state, width, height, x_adjust, y_adjust)}
+    {:noreply, state}
   end
 
   @impl true
