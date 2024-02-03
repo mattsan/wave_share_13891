@@ -54,7 +54,7 @@ defmodule WaveShare13891.LCD do
 
   @impl true
   def handle_cast({:set_window, x_start, y_start, x_end, y_end}, state) do
-    ST7735S.set_window(state, x_start, y_start, x_end, y_end, state.x_adjust, state.y_adjust)
+    ST7735S.set_window(state, x_start, y_start, x_end, y_end)
 
     {:noreply, state}
   end

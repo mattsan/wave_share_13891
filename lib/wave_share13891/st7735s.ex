@@ -10,7 +10,6 @@ defmodule WaveShare13891.ST7735S do
 
     defstruct width: nil,
               height: nil,
-              scanning_direction: nil,
               x_adjust: nil,
               y_adjust: nil,
               lcd_cs: nil,
@@ -21,10 +20,6 @@ defmodule WaveShare13891.ST7735S do
 
     def new do
       %__MODULE__{}
-    end
-
-    def set_scanning_direction(handles, scanning_direction) do
-      %{handles | scanning_direction: scanning_direction}
     end
 
     def set_gram_scan_way(handles, width, height, x_adjust, y_adjust) do
@@ -165,24 +160,7 @@ defmodule WaveShare13891.ST7735S do
   defguard is_pin_level(value) when value in [0, 1]
 
   @spec high?(integer(), integer()) :: boolean()
-  defmacrop high?(value, bit) do
-    quote do
-      (unquote(value) &&& unquote(bit)) != 0
-    end
-  end
-
-  def get_memory_data_access_control(scanning_direction) do
-    case scanning_direction do
-      :l2r_u2d -> 0
-      :l2r_d2u -> @my
-      :r2l_u2d -> @mx
-      :r2l_d2u -> @mx ||| @my
-      :u2d_l2r -> @mv
-      :u2d_r2l -> @mv ||| @mx
-      :d2u_l2r -> @mv ||| @my
-      :d2u_r2l -> @mv ||| @mx ||| @my
-    end
-  end
+  defguardp high?(value, bit) when (value &&& bit) != 0
 
   @doc """
   see
@@ -190,19 +168,9 @@ defmodule WaveShare13891.ST7735S do
   - https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z
   """
   def initialize(handles, scanning_direction) do
-    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
-    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
-    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
-    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
-    {:ok, spi_bus} = SPI.open(@default_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
-
     handles =
       handles
-      |> Handles.set_scanning_direction(scanning_direction)
-      |> Handles.set_lcd_rst(lcd_rst)
-      |> Handles.set_lcd_dc(lcd_dc)
-      |> Handles.set_lcd_bl(lcd_bl)
-      |> Handles.set_spi_bus(spi_bus)
+      |> initialize_device()
 
     set_backlight(handles, false)
 
@@ -210,7 +178,7 @@ defmodule WaveShare13891.ST7735S do
 
     set_initialization_register(handles)
 
-    memory_data_access_control = get_memory_data_access_control(handles.scanning_direction)
+    memory_data_access_control = get_memory_data_access_control(scanning_direction)
 
     write_register(handles, @register_madctl, <<memory_data_access_control ||| @rgb_order>>)
 
@@ -232,20 +200,12 @@ defmodule WaveShare13891.ST7735S do
     Handles.set_gram_scan_way(handles, width, height, x_adjust, y_adjust)
   end
 
-  def set_backlight(handles, condition) do
-    value =
-      if condition do
-        1
-      else
-        0
-      end
+  def set_backlight(handles, true), do: set(handles.lcd_bl, 1)
+  def set_backlight(handles, false), do: set(handles.lcd_bl, 0)
 
-    set_lcd_bl(handles, value)
-  end
-
-  def set_window(handles, x_start, y_start, x_end, y_end, x_adjust, y_adjust) do
-    x_parameter = <<0x00, rem(x_start, 0x100) + x_adjust, 0x00, rem(x_end, 0x100) + x_adjust>>
-    y_parameter = <<0x00, rem(y_start, 0x100) + y_adjust, 0x00, rem(y_end, 0x100) + y_adjust>>
+  def set_window(handles, x_start, y_start, x_end, y_end) do
+    x_parameter = <<0x00, rem(x_start, 0x100) + handles.x_adjust, 0x00, rem(x_end, 0x100) + handles.x_adjust>>
+    y_parameter = <<0x00, rem(y_start, 0x100) + handles.y_adjust, 0x00, rem(y_end, 0x100) + handles.y_adjust>>
 
     write_register(handles, @register_caset, x_parameter)
     write_register(handles, @register_raset, y_parameter)
@@ -253,7 +213,7 @@ defmodule WaveShare13891.ST7735S do
   end
 
   def write_data(handles, data) do
-    set_lcd_dc(handles, 1)
+    set(handles.lcd_dc, 1)
 
     Stream.unfold(data, fn data ->
       case String.split_at(data, 256) do
@@ -262,28 +222,6 @@ defmodule WaveShare13891.ST7735S do
       end
     end)
     |> Enum.each(&transfer(handles, &1))
-  end
-
-  def hardware_reset(handles) do
-    set_lcd_rst(handles, 1)
-    :timer.sleep(100)
-
-    set_lcd_rst(handles, 0)
-    :timer.sleep(100)
-
-    set_lcd_rst(handles, 1)
-    :timer.sleep(100)
-  end
-
-  def set_initialization_register(handles) do
-    frame_rate(handles)
-    column_inversion(handles)
-    power_sequence(handles)
-    vcom(handles)
-    gamma_sequence(handles)
-    enable_test_command(handles)
-    disable_ram_power_save_mode(handles)
-    mode_65k(handles)
   end
 
   def frame_rate(handles) do
@@ -354,34 +292,61 @@ defmodule WaveShare13891.ST7735S do
     SPI.transfer(handles.spi_bus, data)
   end
 
+  defp initialize_device(handles) do
+    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
+    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
+    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
+    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
+    {:ok, spi_bus} = SPI.open(@default_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
+
+    handles
+    |> Handles.set_lcd_rst(lcd_rst)
+    |> Handles.set_lcd_dc(lcd_dc)
+    |> Handles.set_lcd_bl(lcd_bl)
+    |> Handles.set_spi_bus(spi_bus)
+  end
+
+  defp hardware_reset(handles) do
+    set(handles.lcd_rst, 1)
+    :timer.sleep(100)
+
+    set(handles.lcd_rst, 0)
+    :timer.sleep(100)
+
+    set(handles.lcd_rst, 1)
+    :timer.sleep(100)
+  end
+
+  defp set_initialization_register(handles) do
+    frame_rate(handles)
+    column_inversion(handles)
+    power_sequence(handles)
+    vcom(handles)
+    gamma_sequence(handles)
+    enable_test_command(handles)
+    disable_ram_power_save_mode(handles)
+    mode_65k(handles)
+  end
+
+  defp get_memory_data_access_control(scanning_direction) do
+    case scanning_direction do
+      :l2r_u2d -> 0
+      :l2r_d2u -> @my
+      :r2l_u2d -> @mx
+      :r2l_d2u -> @mx ||| @my
+      :u2d_l2r -> @mv
+      :u2d_r2l -> @mv ||| @mx
+      :d2u_l2r -> @mv ||| @my
+      :d2u_r2l -> @mv ||| @mx ||| @my
+    end
+  end
+
   defp select_register(handles, register) do
-    set_lcd_dc(handles, 0)
+    set(handles.lcd_dc, 0)
     transfer(handles, <<register>>)
   end
 
-  defp set_lcd_cs(handles, value) do
-    set(handles, :lcd_cs, value)
-  end
-
-  defp set_lcd_rst(handles, value) do
-    set(handles, :lcd_rst, value)
-  end
-
-  defp set_lcd_dc(handles, value) do
-    set(handles, :lcd_dc, value)
-  end
-
-  defp set_lcd_bl(handles, value) do
-    set(handles, :lcd_bl, value)
-  end
-
-  defp set(handles, port, value) do
-    case port do
-      :lcd_cs -> handles.lcd_cs
-      :lcd_rst -> handles.lcd_rst
-      :lcd_dc -> handles.lcd_dc
-      :lcd_bl -> handles.lcd_bl
-    end
-    |> GPIO.write(value)
+  defp set(handle, value) do
+    GPIO.write(handle, value)
   end
 end
