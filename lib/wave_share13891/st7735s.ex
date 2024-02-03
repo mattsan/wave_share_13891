@@ -184,32 +184,22 @@ defmodule WaveShare13891.ST7735S do
     end
   end
 
-  def initialize_gpio(handles) do
-    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
-    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
-    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
-    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
-
-    %{handles | lcd_rst: lcd_rst, lcd_dc: lcd_dc, lcd_bl: lcd_bl}
-  end
-
-  def initialize_spi(handles) do
-    {:ok, spi_bus} = SPI.open(@default_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
-
-    %{handles | spi_bus: spi_bus}
-  end
-
   @doc """
   see
   - https://www.waveshare.com/wiki/1.44inch_LCD_HAT#Demo
   - https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z
   """
   def initialize(handles, scanning_direction) do
+    [lcd_rst, lcd_dc, lcd_bl] = initialize_gpio()
+    {:ok, spi_bus} = initialize_spi()
+
     handles =
       handles
       |> Handles.set_scanning_direction(scanning_direction)
-      |> initialize_gpio()
-      |> initialize_spi()
+      |> Handles.set_lcd_rst(lcd_rst)
+      |> Handles.set_lcd_dc(lcd_dc)
+      |> Handles.set_lcd_bl(lcd_bl)
+      |> Handles.set_spi_bus(spi_bus)
 
     set_backlight(handles, false)
 
@@ -217,7 +207,16 @@ defmodule WaveShare13891.ST7735S do
 
     set_initialization_register(handles)
 
-    {width, height, x_adjust, y_adjust} = set_gram_scan_way(handles, handles.scanning_direction)
+    memory_data_access_control = get_memory_data_access_control(handles.scanning_direction)
+
+    write_register(handles, @register_madctl, <<memory_data_access_control ||| @rgb_order>>)
+
+    {width, height, x_adjust, y_adjust} =
+      if high?(memory_data_access_control, @mv) do
+        {@width, @height, @y_adjust, @x_adjust}
+      else
+        {@height, @width, @x_adjust, @y_adjust}
+      end
 
     :timer.sleep(100)
 
@@ -335,18 +334,6 @@ defmodule WaveShare13891.ST7735S do
     write_register(handles, @register_colmod, <<0x05>>)
   end
 
-  def set_gram_scan_way(handles, scanning_direction) do
-    memory_data_access_control = get_memory_data_access_control(scanning_direction)
-
-    write_register(handles, @register_madctl, <<memory_data_access_control ||| @rgb_order>>)
-
-    if high?(memory_data_access_control, @mv) do
-      {@width, @height, @y_adjust, @x_adjust}
-    else
-      {@height, @width, @x_adjust, @y_adjust}
-    end
-  end
-
   def sleep_out(handles) do
     select_register(handles, @register_slpout)
   end
@@ -362,6 +349,19 @@ defmodule WaveShare13891.ST7735S do
 
   def transfer(handles, data) do
     SPI.transfer(handles.spi_bus, data)
+  end
+
+  defp initialize_gpio do
+    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
+    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
+    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
+    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
+
+    [lcd_rst, lcd_dc, lcd_bl]
+  end
+
+  defp initialize_spi do
+    SPI.open(@default_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
   end
 
   defp select_register(handles, register) do
