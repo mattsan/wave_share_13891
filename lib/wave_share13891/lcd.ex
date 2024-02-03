@@ -18,14 +18,8 @@ defmodule WaveShare13891.LCD do
     GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
-  @spec set_window(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) :: :ok
-  def set_window(x_start, y_start, x_end, y_end) do
-    GenServer.cast(@name, {:set_window, x_start, y_start, x_end, y_end})
-  end
-
-  @spec write_data(binary()) :: :ok
-  def write_data(data) do
-    GenServer.cast(@name, {:write_data, data})
+  def draw(x_start, y_start, x_end, y_end, data) do
+    GenServer.cast(@name, {:draw, x_start, y_start, x_end, y_end, data})
   end
 
   @spec set_backlight(boolean()) :: :ok
@@ -53,13 +47,9 @@ defmodule WaveShare13891.LCD do
   end
 
   @impl true
-  def handle_cast({:set_window, x_start, y_start, x_end, y_end}, state) do
+
+  def handle_cast({:draw, x_start, y_start, x_end, y_end, data}, state) do
     ST7735S.set_window(state, x_start, y_start, x_end, y_end)
-
-    {:noreply, state}
-  end
-
-  def handle_cast({:write_data, data}, state) do
     ST7735S.write_data(state, data)
 
     {:noreply, state}

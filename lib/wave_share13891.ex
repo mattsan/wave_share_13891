@@ -77,21 +77,7 @@ defmodule WaveShare13891 do
   defdelegate register(key_or_keys, subscriber \\ self()), to: WaveShare13891.KeyEvent
 
   @doc """
-  Sets window area.
-
-  ```
-  width = x_end - x_start + 1
-  ```
-
-  ```
-  height = y_end - y_start + 1
-  ```
-  """
-  @spec set_window(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) :: :ok
-  defdelegate set_window(x_start, y_start, x_end, y_end), to: WaveShare13891.LCD
-
-  @doc """
-  Writes image data.
+  Draws image.
 
   The length of the binary is determined by the size of the window area specified with `set_window/4`.
 
@@ -101,8 +87,8 @@ defmodule WaveShare13891 do
 
   (Because of 16 bit color (2 bytes per dot))
   """
-  @spec write_data(binary()) :: :ok
-  defdelegate write_data(data), to: WaveShare13891.LCD
+  @spec draw(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer(), binary()) :: :ok
+  defdelegate draw(x_start, y_start, x_end, y_end, data), to: WaveShare13891.LCD
 
   @doc """
   Sets LCD backlight.
