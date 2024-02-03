@@ -6,7 +6,16 @@ defmodule WaveShare13891.LCD do
   defmodule State do
     @moduledoc false
 
-    defstruct [:width, :height, :scanning_direction, :x_adjust, :y_adjust]
+    defstruct width: nil,
+              height: nil,
+              scanning_direction: nil,
+              x_adjust: nil,
+              y_adjust: nil,
+              lcd_cs: nil,
+              lcd_rst: nil,
+              lcd_dc: nil,
+              lcd_bl: nil,
+              spi_bus: nil
 
     def new(scanning_direction) do
       %__MODULE__{scanning_direction: scanning_direction}
@@ -14,6 +23,26 @@ defmodule WaveShare13891.LCD do
 
     def set_gram_scan_way(state, width, height, x_adjust, y_adjust) do
       %{state | width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust}
+    end
+
+    def set_lcd_cs(state, value) do
+      %{state | lcd_cs: value}
+    end
+
+    def set_lcd_rst(state, value) do
+      %{state | lcd_rst: value}
+    end
+
+    def set_lcd_dc(state, value) do
+      %{state | lcd_dc: value}
+    end
+
+    def set_lcd_bl(state, value) do
+      %{state | lcd_bl: value}
+    end
+
+    def set_spi_bus(state, value) do
+      %{state | spi_bus: value}
     end
   end
 
@@ -42,7 +71,9 @@ defmodule WaveShare13891.LCD do
   end
 
   @spec set_backlight(boolean()) :: :ok
-  defdelegate set_backlight(condition), to: ST7735S
+  def set_backlight(condition) when is_boolean(condition) do
+    GenServer.call(@name, {:set_backlight, condition})
+  end
 
   @impl true
   def init(opts) do
@@ -56,21 +87,38 @@ defmodule WaveShare13891.LCD do
 
   @impl true
   def handle_info(:init_lcd, state) do
-    {width, height, x_adjust, y_adjust} = ST7735S.initialize(state.scanning_direction)
+    [lcd_rst, lcd_dc, lcd_bl] = ST7735S.initialize_gpio()
+    {:ok, spi_bus} = ST7735S.initialize_spi()
+
+    state =
+      state
+      |> State.set_lcd_rst(lcd_rst)
+      |> State.set_lcd_dc(lcd_dc)
+      |> State.set_lcd_bl(lcd_bl)
+      |> State.set_spi_bus(spi_bus)
+
+    {width, height, x_adjust, y_adjust} = ST7735S.initialize(state, state.scanning_direction)
 
     {:noreply, State.set_gram_scan_way(state, width, height, x_adjust, y_adjust)}
   end
 
   @impl true
   def handle_cast({:set_window, x_start, y_start, x_end, y_end}, state) do
-    ST7735S.set_window(x_start, y_start, x_end, y_end, state.x_adjust, state.y_adjust)
+    ST7735S.set_window(state, x_start, y_start, x_end, y_end, state.x_adjust, state.y_adjust)
 
     {:noreply, state}
   end
 
   def handle_cast({:write_data, data}, state) do
-    ST7735S.write_data(data)
+    ST7735S.write_data(state, data)
 
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_call({:set_backlight, condition}, _from, state) do
+    ST7735S.set_backlight(state, condition)
+
+    {:reply, :ok, state}
   end
 end

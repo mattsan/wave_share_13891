@@ -5,8 +5,6 @@ defmodule WaveShare13891.ST7735S do
   see https://files.waveshare.com/upload/e/e2/ST7735S_V1.1_20111121.pdf
   """
 
-  use GenServer
-
   import Bitwise
 
   alias Circuits.{GPIO, SPI}
@@ -88,7 +86,6 @@ defmodule WaveShare13891.ST7735S do
   # RAMWR (2Ch): Memory Write
   @register_ramwr 0x2C
 
-  @name __MODULE__
   @default_bus_name "spidev0.0"
   @speed_hz 20_000_000
   @delay_us 0
@@ -127,161 +124,6 @@ defmodule WaveShare13891.ST7735S do
     end
   end
 
-  @doc """
-  Starts server.
-
-  - `:name` - Server name (default: `#{inspect(@name)}`)
-  - `:spi_bus_name` - SPI bus name (default: `#{inspect(@default_bus_name)}`)
-  """
-  @spec start_link(keyword()) :: GenServer.on_start()
-  def start_link(opts \\ []) when is_list(opts) do
-    name = Keyword.get(opts, :name, @name)
-    GenServer.start_link(__MODULE__, opts, name: name)
-  end
-
-  @doc """
-  see
-  - https://www.waveshare.com/wiki/1.44inch_LCD_HAT#Demo
-  - https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z
-  """
-  @spec initialize(scanning_direction()) :: device_spec()
-  def initialize(scanning_direction) do
-    set_backlight(false)
-
-    hardware_reset()
-
-    set_initialization_register()
-
-    info = set_gram_scan_way(scanning_direction)
-
-    :timer.sleep(100)
-
-    sleep_out()
-
-    :timer.sleep(120)
-
-    turn_on_lcd_display()
-
-    info
-  end
-
-  @spec set_backlight(boolean()) :: :ok
-  def set_backlight(condition) when is_boolean(condition) do
-    value =
-      if condition do
-        1
-      else
-        0
-      end
-
-    set_lcd_bl(value)
-  end
-
-  def set_window(x_start, y_start, x_end, y_end, x_adjust, y_adjust) do
-    x_parameter = <<0x00, rem(x_start, 0x100) + x_adjust, 0x00, rem(x_end, 0x100) + x_adjust>>
-    y_parameter = <<0x00, rem(y_start, 0x100) + y_adjust, 0x00, rem(y_end, 0x100) + y_adjust>>
-
-    write_register(@register_caset, x_parameter)
-    write_register(@register_raset, y_parameter)
-    select_register(@register_ramwr)
-  end
-
-  def write_data(data) do
-    set_lcd_dc(1)
-
-    Stream.unfold(data, fn data ->
-      case String.split_at(data, 256) do
-        {"", ""} -> nil
-        tuple -> tuple
-      end
-    end)
-    |> Enum.each(&transfer/1)
-  end
-
-  @spec hardware_reset :: :ok
-  def hardware_reset do
-    set_lcd_rst(1)
-    :timer.sleep(100)
-
-    set_lcd_rst(0)
-    :timer.sleep(100)
-
-    set_lcd_rst(1)
-    :timer.sleep(100)
-  end
-
-  def set_initialization_register do
-    frame_rate()
-    column_inversion()
-    power_sequence()
-    vcom()
-    gamma_sequence()
-    enable_test_command()
-    disable_ram_power_save_mode()
-    mode_65k()
-  end
-
-  def frame_rate do
-    # Set the frame frequency of the full colors normal mode.
-    write_register(@register_frmctr1, <<0x01, 0x2C, 0x2D>>)
-    # Set the frame frequency of the Idle mode.
-    write_register(@register_frmctr2, <<0x01, 0x2C, 0x2D>>)
-    # Set the frame frequency of the Partial mode/ full colors.
-    write_register(@register_frmctr3, <<0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D>>)
-  end
-
-  def column_inversion do
-    write_register(@register_invctr, <<0x07>>)
-  end
-
-  def power_sequence do
-    write_register(@register_pwctr1, <<0xA2, 0x02, 0x84>>)
-    write_register(@register_pwctr2, <<0xC5>>)
-    write_register(@register_pwctr3, <<0x0A, 0x00>>)
-    write_register(@register_pwctr4, <<0x8A, 0x2A, 0xC4, 0x8A, 0xEE>>)
-    write_register(@register_pwctr5, <<0x8A, 0xEE>>)
-  end
-
-  def vcom do
-    write_register(@register_vmctr1, <<0x0E>>)
-  end
-
-  def gamma_sequence do
-    write_register(
-      @register_gmctrp1,
-      <<0x0F, 0x1A, 0x0F, 0x18, 0x2F, 0x28, 0x20, 0x22, 0x1F, 0x1B, 0x23, 0x37, 0x00, 0x07, 0x02, 0x10>>
-    )
-
-    write_register(
-      @register_gmctrn1,
-      <<0x0F, 0x1B, 0x0F, 0x17, 0x33, 0x2C, 0x29, 0x2E, 0x30, 0x30, 0x39, 0x3F, 0x00, 0x07, 0x03, 0x10>>
-    )
-  end
-
-  def enable_test_command do
-    write_register(0xF0, <<0x01>>)
-  end
-
-  def disable_ram_power_save_mode do
-    write_register(0xF6, <<0x00>>)
-  end
-
-  def mode_65k do
-    write_register(@register_colmod, <<0x05>>)
-  end
-
-  def set_gram_scan_way(scanning_direction) do
-    memory_data_access_control = get_memory_data_access_control(scanning_direction)
-
-    write_register(@register_madctl, <<memory_data_access_control ||| @rgb_order>>)
-
-    if high?(memory_data_access_control, @mv) do
-      {@width, @height, @y_adjust, @x_adjust}
-    else
-      {@height, @width, @x_adjust, @y_adjust}
-    end
-  end
-
   def get_memory_data_access_control(scanning_direction) do
     case scanning_direction do
       :l2r_u2d -> 0
@@ -295,82 +137,196 @@ defmodule WaveShare13891.ST7735S do
     end
   end
 
-  def sleep_out do
-    select_register(@register_slpout)
-  end
-
-  def turn_on_lcd_display do
-    select_register(@register_dispon)
-  end
-
-  def write_register(register, data) do
-    select_register(register)
-    write_data(data)
-  end
-
-  def select_register(register) do
-    set_lcd_dc(0)
-    transfer(<<register>>)
-  end
-
-  @spec set_lcd_cs(pin_level()) :: :ok
-  def set_lcd_cs(value) when is_pin_level(value) do
-    GenServer.call(@name, {:set, :lcd_cs, value})
-  end
-
-  @spec set_lcd_rst(pin_level()) :: :ok
-  def set_lcd_rst(value) when is_pin_level(value) do
-    GenServer.call(@name, {:set, :lcd_rst, value})
-  end
-
-  @spec set_lcd_dc(pin_level()) :: :ok
-  def set_lcd_dc(value) when is_pin_level(value) do
-    GenServer.call(@name, {:set, :lcd_dc, value})
-  end
-
-  @spec set_lcd_bl(pin_level()) :: :ok
-  def set_lcd_bl(value) when is_pin_level(value) do
-    GenServer.call(@name, {:set, :lcd_bl, value})
-  end
-
-  @doc """
-  Transfers binary data.
-
-  - `data` - binary
-  """
-  @spec transfer(binary()) :: binary()
-  def transfer(pid \\ @name, data) when is_binary(data) do
-    GenServer.call(pid, {:transfer, data})
-  end
-
-  @impl true
-  def init(opts) do
-    spi_bus_name = Keyword.get(opts, :spi_bus_name, @default_bus_name)
-    state = %{lcd_rst: nil, lcd_dc: nil, lcd_bl: nil, spi_bus: nil}
-
-    send(self(), :initialize_gpio)
-    send(self(), {:initialize_spi, spi_bus_name})
-
-    {:ok, state}
-  end
-
-  @impl true
-  def handle_info(:initialize_gpio, state) do
+  def initialize_gpio do
     # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
     {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
     {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
     {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
 
-    {:noreply, %{state | lcd_rst: lcd_rst, lcd_dc: lcd_dc, lcd_bl: lcd_bl}}
+    [lcd_rst, lcd_dc, lcd_bl]
   end
 
-  def handle_info({:initialize_spi, spi_bus_name}, state) do
-    {:ok, spi_bus} = SPI.open(spi_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
-
-    {:noreply, %{state | spi_bus: spi_bus}}
+  def initialize_spi(spi_bus_name \\ @default_bus_name) do
+    SPI.open(spi_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
   end
 
-  def handle_call({:set, port, value}, _from, state) do
+  @doc """
+  see
+  - https://www.waveshare.com/wiki/1.44inch_LCD_HAT#Demo
+  - https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z
+  """
+  def initialize(state, scanning_direction) do
+    set_backlight(state, false)
+
+    hardware_reset(state)
+
+    set_initialization_register(state)
+
+    info = set_gram_scan_way(state, scanning_direction)
+
+    :timer.sleep(100)
+
+    sleep_out(state)
+
+    :timer.sleep(120)
+
+    turn_on_lcd_display(state)
+
+    info
+  end
+
+  def set_backlight(state, condition) do
+    value =
+      if condition do
+        1
+      else
+        0
+      end
+
+    set_lcd_bl(state, value)
+  end
+
+  def set_window(state, x_start, y_start, x_end, y_end, x_adjust, y_adjust) do
+    x_parameter = <<0x00, rem(x_start, 0x100) + x_adjust, 0x00, rem(x_end, 0x100) + x_adjust>>
+    y_parameter = <<0x00, rem(y_start, 0x100) + y_adjust, 0x00, rem(y_end, 0x100) + y_adjust>>
+
+    write_register(state, @register_caset, x_parameter)
+    write_register(state, @register_raset, y_parameter)
+    select_register(state, @register_ramwr)
+  end
+
+  def write_data(state, data) do
+    set_lcd_dc(state, 1)
+
+    Stream.unfold(data, fn data ->
+      case String.split_at(data, 256) do
+        {"", ""} -> nil
+        tuple -> tuple
+      end
+    end)
+    |> Enum.each(&transfer(state, &1))
+  end
+
+  def hardware_reset(state) do
+    set_lcd_rst(state, 1)
+    :timer.sleep(100)
+
+    set_lcd_rst(state, 0)
+    :timer.sleep(100)
+
+    set_lcd_rst(state, 1)
+    :timer.sleep(100)
+  end
+
+  def set_initialization_register(state) do
+    frame_rate(state)
+    column_inversion(state)
+    power_sequence(state)
+    vcom(state)
+    gamma_sequence(state)
+    enable_test_command(state)
+    disable_ram_power_save_mode(state)
+    mode_65k(state)
+  end
+
+  def frame_rate(state) do
+    # Set the frame frequency of the full colors normal mode.
+    write_register(state, @register_frmctr1, <<0x01, 0x2C, 0x2D>>)
+    # Set the frame frequency of the Idle mode.
+    write_register(state, @register_frmctr2, <<0x01, 0x2C, 0x2D>>)
+    # Set the frame frequency of the Partial mode/ full colors.
+    write_register(state, @register_frmctr3, <<0x01, 0x2C, 0x2D, 0x01, 0x2C, 0x2D>>)
+  end
+
+  def column_inversion(state) do
+    write_register(state, @register_invctr, <<0x07>>)
+  end
+
+  def power_sequence(state) do
+    write_register(state, @register_pwctr1, <<0xA2, 0x02, 0x84>>)
+    write_register(state, @register_pwctr2, <<0xC5>>)
+    write_register(state, @register_pwctr3, <<0x0A, 0x00>>)
+    write_register(state, @register_pwctr4, <<0x8A, 0x2A, 0xC4, 0x8A, 0xEE>>)
+    write_register(state, @register_pwctr5, <<0x8A, 0xEE>>)
+  end
+
+  def vcom(state) do
+    write_register(state, @register_vmctr1, <<0x0E>>)
+  end
+
+  def gamma_sequence(state) do
+    write_register(
+      state,
+      @register_gmctrp1,
+      <<0x0F, 0x1A, 0x0F, 0x18, 0x2F, 0x28, 0x20, 0x22, 0x1F, 0x1B, 0x23, 0x37, 0x00, 0x07, 0x02, 0x10>>
+    )
+
+    write_register(
+      state,
+      @register_gmctrn1,
+      <<0x0F, 0x1B, 0x0F, 0x17, 0x33, 0x2C, 0x29, 0x2E, 0x30, 0x30, 0x39, 0x3F, 0x00, 0x07, 0x03, 0x10>>
+    )
+  end
+
+  def enable_test_command(state) do
+    write_register(state, 0xF0, <<0x01>>)
+  end
+
+  def disable_ram_power_save_mode(state) do
+    write_register(state, 0xF6, <<0x00>>)
+  end
+
+  def mode_65k(state) do
+    write_register(state, @register_colmod, <<0x05>>)
+  end
+
+  def set_gram_scan_way(state, scanning_direction) do
+    memory_data_access_control = get_memory_data_access_control(scanning_direction)
+
+    write_register(state, @register_madctl, <<memory_data_access_control ||| @rgb_order>>)
+
+    if high?(memory_data_access_control, @mv) do
+      {@width, @height, @y_adjust, @x_adjust}
+    else
+      {@height, @width, @x_adjust, @y_adjust}
+    end
+  end
+
+  def sleep_out(state) do
+    select_register(state, @register_slpout)
+  end
+
+  def turn_on_lcd_display(state) do
+    select_register(state, @register_dispon)
+  end
+
+  def select_register(state, register) do
+    set_lcd_dc(state, 0)
+    transfer(state, <<register>>)
+  end
+
+  def set_lcd_cs(state, value) do
+    set(state, :lcd_cs, value)
+  end
+
+  def set_lcd_rst(state, value) do
+    set(state, :lcd_rst, value)
+  end
+
+  def set_lcd_dc(state, value) do
+    set(state, :lcd_dc, value)
+  end
+
+  def set_lcd_bl(state, value) do
+    set(state, :lcd_bl, value)
+  end
+
+  def write_register(state, register, data) do
+    select_register(state, register)
+    write_data(state, data)
+  end
+
+  def set(state, port, value) do
     case port do
       :lcd_cs -> state.lcd_cs
       :lcd_rst -> state.lcd_rst
@@ -378,14 +334,9 @@ defmodule WaveShare13891.ST7735S do
       :lcd_bl -> state.lcd_bl
     end
     |> GPIO.write(value)
-
-    {:reply, :ok, state}
   end
 
-  @impl true
-  def handle_call({:transfer, data}, _from, state) do
+  def transfer(state, data) do
     SPI.transfer(state.spi_bus, data)
-
-    {:reply, :ok, state}
   end
 end

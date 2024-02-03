@@ -117,7 +117,6 @@ defmodule WaveShare13891 do
     children = [
       {Registry, keys: :duplicate, name: Registry.WaveShare13891},
       WaveShare13891.KeyEvent,
-      WaveShare13891.ST7735S,
       WaveShare13891.LCD
     ]
 
