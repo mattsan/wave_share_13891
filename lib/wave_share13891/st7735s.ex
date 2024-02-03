@@ -190,8 +190,11 @@ defmodule WaveShare13891.ST7735S do
   - https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z
   """
   def initialize(handles, scanning_direction) do
-    [lcd_rst, lcd_dc, lcd_bl] = initialize_gpio()
-    {:ok, spi_bus} = initialize_spi()
+    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
+    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
+    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
+    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
+    {:ok, spi_bus} = SPI.open(@default_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
 
     handles =
       handles
@@ -349,19 +352,6 @@ defmodule WaveShare13891.ST7735S do
 
   def transfer(handles, data) do
     SPI.transfer(handles.spi_bus, data)
-  end
-
-  defp initialize_gpio do
-    # {:ok, lcd_cs} = GPIO.open(@pin_out_lcd_cs, :output)
-    {:ok, lcd_rst} = GPIO.open(@pin_out_lcd_rst, :output)
-    {:ok, lcd_dc} = GPIO.open(@pin_out_lcd_dc, :output)
-    {:ok, lcd_bl} = GPIO.open(@pin_out_lcd_bl, :output)
-
-    [lcd_rst, lcd_dc, lcd_bl]
-  end
-
-  defp initialize_spi do
-    SPI.open(@default_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
   end
 
   defp select_register(handles, register) do
