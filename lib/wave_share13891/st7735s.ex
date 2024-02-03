@@ -190,7 +190,7 @@ defmodule WaveShare13891.ST7735S do
     set_lcd_dc(1)
 
     Stream.unfold(data, fn data ->
-      case String.split_at(data, 4096) do
+      case String.split_at(data, 256) do
         {"", ""} -> nil
         tuple -> tuple
       end
