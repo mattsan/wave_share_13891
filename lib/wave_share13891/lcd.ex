@@ -1,76 +1,61 @@
 defmodule WaveShare13891.LCD do
+  @moduledoc """
+  Waveshare 13891 LCD server.
+  """
+
   use GenServer
 
-  defstruct [:dis_column, :dis_page, :scan_dir, :x_adjust, :y_adjust]
+  alias WaveShare13891.ST7735S
 
-  alias WaveShare13891.LCD
-  alias WaveShare13891.LCD.Device
-
-  require Bitwise
-  import Bitwise
+  @type rect() :: %{
+          x: non_neg_integer(),
+          y: non_neg_integer(),
+          width: pos_integer(),
+          height: pos_integer()
+        }
 
   @name __MODULE__
 
-  def start_link(opts) do
-    scan_dir = Keyword.get(opts, :scan_dir, :u2d_r2l)
-    state = %{scan_dir: scan_dir}
-    GenServer.start_link(__MODULE__, state, name: @name)
+  @doc """
+  Starts LCD server.
+
+  ## Options
+
+  - `:scanning_direction` - scanning direction (default `:u2d_r2l`)
+      - see [`WaveShare13891.ST7735S.scanning_direction()`](WaveShare13891.ST7735S.html#t:scanning_direction/0)
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
-  def set_windows(x_start, y_start, x_end, y_end) do
-    GenServer.cast(@name, {:set_windows, x_start, y_start, x_end, y_end})
+  @spec set_backlight(boolean()) :: :ok
+  def set_backlight(condition) when is_boolean(condition) do
+    GenServer.cast(@name, {:set_backlight, condition})
   end
 
-  def set_color(data) do
-    GenServer.cast(@name, {:set_color, data})
+  @spec draw(binary(), rect()) :: :ok
+  def draw(data, %{x: _, y: _, width: _, height: _} = rect) when is_binary(data) do
+    GenServer.cast(@name, {:draw, data, rect})
   end
 
-  def init(state) do
-    GenServer.cast(@name, :init_lcd)
+  @impl true
+  def init(opts) do
+    scanning_direction = Keyword.get(opts, :scanning_direction, :u2d_r2l)
+    state = ST7735S.initialize(scanning_direction)
 
-    new_state =
-      state
-      |> Map.put(:lcd, %LCD{scan_dir: :d2u_l2r})
-
-    {:ok, new_state}
+    {:ok, state}
   end
 
-  def handle_cast(:init_lcd, state) do
-    {dis_column, dis_page, x_adjust, y_adjust} = Device.initialize(state.scan_dir)
-
-    lcd = %LCD{state.lcd |
-      dis_column: dis_column,
-      dis_page: dis_page,
-      x_adjust: x_adjust,
-      y_adjust: y_adjust
-    }
-
-    {:noreply, %{state | lcd: lcd}}
-  end
-
-  def handle_cast({:set_windows, x_start, y_start, x_end, y_end}, state) do
-    x = <<
-      0x00,
-      (x_start &&& 0xff) + state.lcd.x_adjust,
-      0x00,
-      (x_end &&& 0xff) + state.lcd.x_adjust
-    >>
-    y = <<
-      0x00,
-      (y_start &&& 0xff) + state.lcd.y_adjust,
-      0x00,
-      (y_end &&& 0xff) + state.lcd.y_adjust
-    >>
-
-    Device.write_register(0x2a, x)
-    Device.write_register(0x2b, y)
-    Device.select_register(0x2c)
+  @impl true
+  def handle_cast({:draw, data, rect}, state) do
+    ST7735S.draw(state, data, rect)
 
     {:noreply, state}
   end
 
-  def handle_cast({:set_color, data}, state) do
-    Device.write_data(data)
+  def handle_cast({:set_backlight, condition}, state) do
+    ST7735S.set_backlight(state, condition)
 
     {:noreply, state}
   end
