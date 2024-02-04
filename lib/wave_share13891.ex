@@ -35,9 +35,9 @@ defmodule WaveShare13891 do
   ### Register subscribing keys
 
   ```elixir
-  WaveShare13891.register(:key1)          # single key
+  WaveShare13891.subscribe(:key1)          # single key
   # or
-  WaveShare13891.register([:key2, :key3]) # multiple keys
+  WaveShare13891.subscribe([:key2, :key3]) # multiple keys
   ```
 
   ### Recieve key event message
@@ -73,22 +73,22 @@ defmodule WaveShare13891 do
   - `key_or_keys` - subscribing key(s)
   - `subscriber` - process id (default `self()`)
   """
-  @spec register(WaveShare13891.KeyEvent.key() | [WaveShare13891.KeyEvent.key()], pid()) :: :ok
-  defdelegate register(key_or_keys, subscriber \\ self()), to: WaveShare13891.KeyEvent
+  @spec subscribe(WaveShare13891.KeyEvent.key() | [WaveShare13891.KeyEvent.key()], pid()) :: :ok
+  defdelegate subscribe(key_or_keys, subscriber \\ self()), to: WaveShare13891.KeyEvent
 
   @doc """
   Draws image.
 
-  The length of the binary is determined by the size of the window area specified with `set_window/4`.
+  The length of the binary is determined by the size of the window area.
 
   ```
-  binary_length = (x_end - x_start + 1) * (y_end - y_start + 1) * 2
+  binary_length = width * height * 2
   ```
 
   (Because of 16 bit color (2 bytes per dot))
   """
-  @spec draw(non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer(), binary()) :: :ok
-  defdelegate draw(x_start, y_start, x_end, y_end, data), to: WaveShare13891.LCD
+  @spec draw(binary(), WaveShare13891.LCD.rect()) :: :ok
+  defdelegate draw(data, rect), to: WaveShare13891.LCD
 
   @doc """
   Sets LCD backlight.

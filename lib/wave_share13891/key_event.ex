@@ -35,14 +35,14 @@ defmodule WaveShare13891.KeyEvent do
     GenServer.start_link(__MODULE__, opts, name: @name)
   end
 
-  @spec register(key() | [key()], pid()) :: :ok
-  def register(key_or_keys, subscriber)
+  @spec subscribe(key() | [key()], pid()) :: :ok
+  def subscribe(key_or_keys, subscriber)
 
-  def register(keys, subscriber) when is_list(keys) and is_pid(subscriber) do
-    Enum.each(keys, &register(&1, subscriber))
+  def subscribe(keys, subscriber) when is_list(keys) and is_pid(subscriber) do
+    Enum.each(keys, &subscribe(&1, subscriber))
   end
 
-  def register(key, subscriber) when is_key(key) and is_pid(subscriber) do
+  def subscribe(key, subscriber) when is_key(key) and is_pid(subscriber) do
     Registry.register(Registry.WaveShare13891, key, subscriber)
   end
 
