@@ -2,7 +2,11 @@ defmodule WaveShare13891.ST7735S do
   @moduledoc """
   Waveshare 13891 LCD low level interface module.
 
-  see https://files.waveshare.com/upload/e/e2/ST7735S_V1.1_20111121.pdf
+  This implementation is based on the documentation and source code below.
+
+  - [1.44inch LCD HAT - Waveshare Wiki](https://www.waveshare.com/wiki/1.44inch_LCD_HAT)
+      - [Datasheet](https://files.waveshare.com/upload/e/e2/ST7735S_V1.1_20111121.pdf) (PDF file)
+      - [Demo](https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z) (7z file, implemented by C)
   """
 
   defmodule Handles do
@@ -169,10 +173,6 @@ defmodule WaveShare13891.ST7735S do
 
   @doc """
   Initializes ST7735S.
-
-  see:
-  - https://www.waveshare.com/wiki/1.44inch_LCD_HAT#Demo
-  - https://files.waveshare.com/upload/f/fa/1.44inch-LCD-HAT-Code.7z
   """
   @spec initialize(scanning_direction()) :: handles()
   def initialize(scanning_direction) when is_scanning_direction(scanning_direction) do

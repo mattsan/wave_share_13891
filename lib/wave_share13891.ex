@@ -2,6 +2,8 @@ defmodule WaveShare13891 do
   @moduledoc """
   Waveshare 13891 interface module.
 
+  ## Module Layers
+
   ```
   +--------------------------------------------------+
   |                  WaveShare13891                  |
@@ -23,20 +25,51 @@ defmodule WaveShare13891 do
   WaveShare13891.set_backlight(false) # off
   ```
 
-  ### Writes image
+  ### Draws image
 
   ```elixir
-  WaveShare13891.set_window(0, 0, 7, 7)
-  WaveShare13891.write_data(<<0::unit(16)-size(8 * 8)>>)
+  WaveShare13891.draw(<<0::unit(16)-size(8 * 8)>>, %{x: 0, y: 0, width: 8, height: 8})
+  ```
+
+  #### Example
+
+  ```elixir
+  # Draws character `A` on the center of the display
+
+  # Bit pattern of `A`
+  char_a = <<
+    0b00010000,
+    0b00101000,
+    0b01000100,
+    0b10000010,
+    0b11111110,
+    0b10000010,
+    0b10000010,
+    0b00000000
+  >>
+
+  # Makes image
+  image =
+    for <<(<<bit::1>> <- char_a)>>, into: <<>> do
+      case bit do
+        0 -> <<0x0000::16>>
+        1 -> <<0xFFFF::16>>
+      end
+    end
+
+  # Draws image
+  WaveShare13891.draw(image, %{x: 60, y: 60, width: 8, height: 8})
   ```
 
   ## Key events
 
-  ### Register subscribing keys
+  ### Subscribes keys
 
   ```elixir
-  WaveShare13891.subscribe(:key1)          # single key
-  # or
+  WaveShare13891.subscribe(:key1) # single key
+  ```
+
+  ```elixir
   WaveShare13891.subscribe([:key2, :key3]) # multiple keys
   ```
 

@@ -18,6 +18,11 @@ defmodule WaveShare13891.LCD do
 
   @doc """
   Starts LCD server.
+
+  ## Options
+
+  - `:scanning_direction` - scanning direction (default `:u2d_r2l`)
+      - see [`WaveShare13891.ST7735S.scanning_direction()`](WaveShare13891.ST7735S.html#t:scanning_direction/0)
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
