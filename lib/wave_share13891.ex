@@ -132,11 +132,13 @@ defmodule WaveShare13891 do
   defdelegate set_backlight(condition), to: WaveShare13891.LCD
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
+    scanning_direction = Keyword.get(opts, :scanning_direction, :u2d_r2l)
+
     children = [
       {Registry, keys: :duplicate, name: Registry.WaveShare13891},
       WaveShare13891.KeyEvent,
-      WaveShare13891.LCD
+      {WaveShare13891.LCD, scanning_direction: scanning_direction}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
