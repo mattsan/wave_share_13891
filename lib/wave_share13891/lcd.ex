@@ -42,20 +42,20 @@ defmodule WaveShare13891.LCD do
   @impl true
   def init(opts) do
     scanning_direction = Keyword.get(opts, :scanning_direction, :u2d_r2l)
-    state = ST7735S.initialize(scanning_direction)
+    handles = ST7735S.initialize(scanning_direction)
 
-    {:ok, state}
+    {:ok, %{handles: handles}}
   end
 
   @impl true
   def handle_cast({:draw, data, rect}, state) do
-    ST7735S.draw(state, data, rect)
+    ST7735S.draw(state.handles, data, rect)
 
     {:noreply, state}
   end
 
   def handle_cast({:set_backlight, condition}, state) do
-    ST7735S.set_backlight(state, condition)
+    ST7735S.set_backlight(state.handles, condition)
 
     {:noreply, state}
   end
