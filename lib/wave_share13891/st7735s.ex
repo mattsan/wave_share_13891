@@ -12,42 +12,33 @@ defmodule WaveShare13891.ST7735S do
   defmodule Handles do
     @moduledoc false
 
-    defstruct width: nil,
-              height: nil,
-              x_adjust: nil,
-              y_adjust: nil,
-              lcd_cs: nil,
-              lcd_rst: nil,
-              lcd_dc: nil,
-              lcd_bl: nil,
-              spi_bus: nil
+    @width 128
+    @height 128
+    @x_adjust 2
+    @y_adjust 1
 
-    def new do
-      %__MODULE__{}
+    defstruct [
+      :lcd_cs,
+      :lcd_rst,
+      :lcd_dc,
+      :lcd_bl,
+      :spi_bus,
+      width: @width,
+      height: @height,
+      x_adjust: @x_adjust,
+      y_adjust: @y_adjust
+    ]
+
+    def new(params) do
+      __struct__(params)
     end
 
     def set_gram_scan_way(handles, width, height, x_adjust, y_adjust) do
       %{handles | width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust}
     end
 
-    def set_lcd_cs(handles, value) do
-      %{handles | lcd_cs: value}
-    end
-
-    def set_lcd_rst(handles, value) do
-      %{handles | lcd_rst: value}
-    end
-
-    def set_lcd_dc(handles, value) do
-      %{handles | lcd_dc: value}
-    end
-
-    def set_lcd_bl(handles, value) do
-      %{handles | lcd_bl: value}
-    end
-
-    def set_spi_bus(handles, value) do
-      %{handles | spi_bus: value}
+    def exchange_row_column(%__MODULE__{width: width, height: height, x_adjust: x_adjust, y_adjust: y_adjust} = handles) do
+      %{handles | width: height, height: width, x_adjust: y_adjust, y_adjust: x_adjust}
     end
   end
 
@@ -69,11 +60,6 @@ defmodule WaveShare13891.ST7735S do
 
   # RGB-BGR Order bit (0: RGB color filter panel, 1: BGR color filter panel)
   @rgb_order 0b00001000
-
-  @height 128
-  @width 128
-  @x_adjust 2
-  @y_adjust 1
 
   # MADCTL : Memory Data Access Control
   @register_madctl 0x36
@@ -189,9 +175,9 @@ defmodule WaveShare13891.ST7735S do
     turn_on_lcd_display(handles)
 
     if high?(memory_data_access_control, @exchange_row_column) do
-      Handles.set_gram_scan_way(handles, @width, @height, @y_adjust, @x_adjust)
+      Handles.exchange_row_column(handles)
     else
-      Handles.set_gram_scan_way(handles, @height, @width, @x_adjust, @y_adjust)
+      handles
     end
   end
 
@@ -258,11 +244,7 @@ defmodule WaveShare13891.ST7735S do
     {:ok, lcd_bl} = GPIO.open(@gpio_outlcd_bl, :output)
     {:ok, spi_bus} = SPI.open(@default_bus_name, speed_hz: @speed_hz, delay_us: @delay_us)
 
-    Handles.new()
-    |> Handles.set_lcd_rst(lcd_rst)
-    |> Handles.set_lcd_dc(lcd_dc)
-    |> Handles.set_lcd_bl(lcd_bl)
-    |> Handles.set_spi_bus(spi_bus)
+    Handles.new(lcd_rst: lcd_rst, lcd_dc: lcd_dc, lcd_bl: lcd_bl, spi_bus: spi_bus)
   end
 
   defp hardware_reset(handles) do
